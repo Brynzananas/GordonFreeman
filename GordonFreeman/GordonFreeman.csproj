@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.1</TargetFramework>
+		<LangVersion>preview</LangVersion>
+		<BaseOutputPath>D:\r2modman\RiskOfRain2\profiles\my_mod\BepInEx\plugins\GordonFreeman</BaseOutputPath>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="BepInEx.Core" Version="5.4.21" />
+		<PackageReference Include="MMHOOK.RoR2" Version="2025.5.5" NoWarn="NU1701" />
+		<PackageReference Include="MonoMod.Backports" Version="1.1.2" />
+		<PackageReference Include="R2API.Skills" Version="1.0.1" />
+		<PackageReference Include="RiskOfRain2.GameLibs" Version="1.3.8-r.0" />
+		<PackageReference Include="UnityEngine.Modules" Version="2021.3.33" />
+		<PackageReference Include="R2API" Version="5.0.5" />
+		<PackageReference Include="Rune580.Mods.RiskOfRain2.RiskOfOptions" Version="2.8.2" />
+		<PackageReference Include="MetrosexualFruitcake-CustomEmotesAPI" Version="1.6.3" />
+		<Reference Include="Brynzananas-BrynzaAPI">
+			<HintPath>D:\r2modman\RiskOfRain2\profiles\my_mod\BepInEx\plugins\BrynzaAPI\Debug\netstandard2.1\BrynzaAPI.dll</HintPath>
+		</Reference>
+		<Reference Include="R2API-CharacterBody">
+			<HintPath>D:\r2modman\RiskOfRain2\profiles\my_mod\BepInEx\plugins\R2API.CharacterBody.dll</HintPath>
+		</Reference>
+		<Reference Include="Brynzananas-BodyModelAdditionsAPI">
+			<HintPath>D:\r2modman\RiskOfRain2\profiles\my_mod\BepInEx\plugins\BrynzaSkinsAPI\Debug\netstandard2.1\BodyModelAdditionsAPI.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
+</Project>
