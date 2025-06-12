@@ -62,7 +62,7 @@ namespace GordonFreeman
                 ))
             {
                 //c.Emit(OpCodes.Ldloc, 9);
-                Debug.Log(c.Emit(OpCodes.Ldloc, 9));
+                Debug.Log(c.Emit(OpCodes.Ldloc, 13));
                 Debug.Log(c2.Next);
                 c.EmitDelegate<Func<bool, bool>>((cb) =>
                 {
