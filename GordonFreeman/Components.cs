@@ -82,7 +82,7 @@ namespace GordonFreeman
                 state.time = 0;
             }
             if (buttonState.time > 0) isSprintDown = true;
-            buttonState.time = 0.1f;
+            buttonState.time = 0.15f;
         }
         public override void FixedUpdate()
         {
@@ -102,6 +102,7 @@ namespace GordonFreeman
         }
         public override bool CanExecuteSkill(GenericSkill skillSlot)
         {
+            if (skillLocator && ((skillLocator.primary && skillSlot == skillLocator.primary) || (skillLocator.secondary && skillSlot == skillLocator.secondary)) && professionalCharacterComponent && professionalCharacterComponent.weaponWheelSelectorComponent && professionalCharacterComponent.weaponWheelSelectorComponent.mainSelector && professionalCharacterComponent.weaponWheelSelectorComponent.mainSelector.activeSelf) return false;
             if (characterBody && skillLocator && skillLocator.utility && skillSlot == skillLocator.utility) return false;
             return base.CanExecuteSkill(skillSlot);
         }
@@ -121,6 +122,7 @@ namespace GordonFreeman
         public ProfessionalSkillLocator[] weapons;
         public GenericSkill[] skills;
         public ProfessionalSkillLocator currentWeapon;
+        public ProfessionalModelComponent modelComponent;
         public GenericSkill currentSpecial;
         public EntityStateMachine specialStateMachine;
         [HideInInspector] public ProfessionalSkillLocator previousWeapon;
@@ -136,10 +138,23 @@ namespace GordonFreeman
         [HideInInspector] public HGButton selectedButton;
         public GameObject weaponObject;
         public FirstPersonCamera firstPersonCamera;
-        [HideInInspector] public int bloodlustKills;
-        [HideInInspector] public bool bloodlust;
-        [HideInInspector] public float bloodlustTimer;
         [HideInInspector] public UtiltiyCharges utilityCharges;
+        private int _rampageCount;
+        public float rampageStopwatch;
+        public int rampageCount
+        {
+            get
+            {
+                return _rampageCount;
+            }
+            set
+            {
+                rampageStopwatch = 0f;
+                if (value == _rampageCount) return;
+                _rampageCount = value;
+                Main.rampage = _rampageCount > 5;
+            }
+        }
         private bool built = false;
         public void OnEnable()
         {
@@ -166,6 +181,7 @@ namespace GordonFreeman
                 eventSystemLocator = weaponWheelSelectorComponent.mPEventSystemLocator;
                 weaponWheelSelectorComponent.networkUser = characterBody?.master?.playerCharacterMasterController?.networkUser;
                 weaponWheelSelectorComponent.player = weaponWheelSelectorComponent?.networkUser?.inputPlayer;
+                
                 Transform weaponSelector = childLocator.FindChild("WeaponSelector");
                 Transform specialSelector = childLocator.FindChild("SpecialsSelector");
                 Transform utilities = childLocator.FindChild("UtilityCharges");
@@ -190,6 +206,11 @@ namespace GordonFreeman
                     {
                         selectedButton = hGButton;
                     }
+                    ProfessionalSkillDef primarySkillDef = skill.primarySkill && skill.primarySkill.baseSkill && skill.primarySkill.baseSkill is ProfessionalSkillDef ? skill.primarySkill.skillDef  as ProfessionalSkillDef: null;
+                    if (primarySkillDef && primarySkillDef.weaponModel)
+                    {
+                        modelComponent.AddWeaponModel(primarySkillDef, primarySkillDef.weaponModel);
+                    }
                     weaponWheelSelectorComponent.weaponButtons.Add(hGButton);
                 }
                 bool selectFirstSpecial = false;
@@ -198,6 +219,7 @@ namespace GordonFreeman
                     {
                         HeroSpecialSkillDef heroSpecialSkillDef = skill.baseSkill != null && skill.baseSkill is HeroSpecialSkillDef ? skill.baseSkill as HeroSpecialSkillDef : null;
                         if (heroSpecialSkillDef == null) continue;
+                        List<GenericSkill> allSkills = skillLocator.allSkills.ToList();
                         foreach (var specialSkill in heroSpecialSkillDef.skillsSelection)
                         {
                             GenericSkill genericSkill = gameObject.AddComponent<GenericSkill>();
@@ -206,7 +228,7 @@ namespace GordonFreeman
                             genericSkill.skillDef = specialSkill;
                             genericSkill.AssignSkill(specialSkill);
                             genericSkill.stateMachine = specialStateMachine;
-                            skillLocator.allSkills.AddItem(genericSkill);
+                            allSkills.Add(genericSkill);
                             GameObject specialButtonSelector = Instantiate(SpecialButtonSelector, specialSelector);
                             SpeicalButtonSelectorComponent specialButtonSelectorComponent = specialButtonSelector.GetComponent<SpeicalButtonSelectorComponent>();
                             specialButtonSelectorComponent.genericSkill = genericSkill;
@@ -232,6 +254,7 @@ namespace GordonFreeman
                                 selectFirstSpecial = true;
                             }
                         }
+                        skillLocator.allSkills = allSkills.ToArray();
                     }
                 if (selectFirstSpecial)
                 {
@@ -243,17 +266,15 @@ namespace GordonFreeman
         }
         public void OnDisable()
         {
-            Main.rampgage = false;
+            Main.rampage = false;
         }
         public void RegisterKill(CharacterBody characterBody)
         {
-            bloodlustTimer = 5f;
-            bloodlustKills++;
-            if (bloodlustKills >= 5) Main.rampgage = true;
+            rampageCount++;
         }
         public void RegisterHit(CharacterBody characterBody, DamageInfo damageInfo)
         {
-            bloodlustTimer = 5f;
+            rampageStopwatch = 0f;
         }
         public void FixedUpdate()
         {
@@ -261,7 +282,7 @@ namespace GordonFreeman
             {
                 if (inputBankTest.skill3.justPressed)
                 {
-                    weaponWheelSelectorComponent.mainSelector.SetActive(true);
+                    weaponWheelSelectorComponent.EnableMainSelector();
                 }
                 if (inputBankTest.skill3.justReleased)
                 {
@@ -270,7 +291,7 @@ namespace GordonFreeman
                         selectedButton.Press();
                     }
 
-                    weaponWheelSelectorComponent.mainSelector.SetActive(false);
+                    weaponWheelSelectorComponent.DisableMainSelector();
                 }
             }
 
@@ -278,13 +299,11 @@ namespace GordonFreeman
 
         public void Update()
         {
-            if (bloodlustTimer > 0) bloodlustTimer -= Time.deltaTime;
-            if (bloodlustTimer <= 0)
+            rampageStopwatch += Time.deltaTime;
+            if (rampageStopwatch > 7f)
             {
-                bloodlustKills = 0;
-                Main.rampgage = false;
+                rampageCount = 0;
             }
-
         }
         public void SwapUp()
         {
@@ -330,6 +349,7 @@ namespace GordonFreeman
                     skill.secondarySkill.RecalculateValues();
                 }
             }
+            modelComponent.PullOnWeaponModel(professionalSkillLocator.primarySkill.baseSkill);
         }
         public void ApplySpecial(GenericSkill genericSkill)
         {
@@ -346,6 +366,65 @@ namespace GordonFreeman
                 skill.LinkSkill(genericSkill);
                 skill.RecalculateValues();
             }
+        }
+    }
+    public class ProfessionalModelComponent : MonoBehaviour
+    {
+        [HideInInspector] public Dictionary<SkillDef, WeaponModel> keyValuePairs = new Dictionary<SkillDef, WeaponModel>();
+        public Transform weaponsTransform;
+        public Transform weaponTransform;
+        [HideInInspector] public WeaponModel currentWeaponModel;
+        public FirstPersonCamera firstPersonCamera;
+        public CameraTargetParams cameraTargetParams;
+        public ChildLocator childLocator;
+        [HideInInspector] public Vector3 previousVector;
+        public void AddWeaponModel(SkillDef skillDef, WeaponModelDef weaponModelDef)
+        {
+            if (skillDef == null || weaponModelDef == null || keyValuePairs.ContainsKey(skillDef)) return;
+            WeaponModel weaponModel = weaponModelDef.ApplyWeaponModel(this);
+            keyValuePairs.Add(skillDef, weaponModel);
+        }
+        public WeaponModel PullOnWeaponModel(SkillDef skillDef)
+        {
+            if (skillDef == null) return null;
+            if (!keyValuePairs.ContainsKey(skillDef))
+            {
+                PullOffCurrentWeaponModel();
+                return null;
+            }
+            WeaponModel weaponModel = keyValuePairs[skillDef];
+            if(currentWeaponModel)
+            {
+                if (currentWeaponModel == weaponModel) return weaponModel;
+                PullOffCurrentWeaponModel();
+            }
+            weaponModel.gameObject.SetActive(true);
+            currentWeaponModel = weaponModel;
+            weaponModel.transform.rotation = Quaternion.identity;
+            weaponModel.transform.SetParent(weaponTransform, false);
+            int i = childLocator.FindChildIndex("Muzzle");
+            if(i != -1)
+            childLocator.transformPairs[i].transform = weaponModel.muzzleTransform ? weaponModel.muzzleTransform : weaponTransform;
+            return weaponModel;
+        }
+        public void PullOffCurrentWeaponModel()
+        {
+            if(currentWeaponModel == null) return;
+            if (currentWeaponModel)
+            {
+                currentWeaponModel.transform.SetParent(weaponsTransform, false);
+                currentWeaponModel.gameObject.SetActive(false);
+                currentWeaponModel.transform.rotation = Quaternion.identity;
+                currentWeaponModel = null;
+                int i = childLocator.FindChildIndex("Muzzle");
+                if (i != -1)
+                    childLocator.transformPairs[i].transform = weaponTransform;
+            }
+        }
+        public void Update()
+        {
+            if (!currentWeaponModel) return;
+            currentWeaponModel.transform.localEulerAngles = new Vector3 (cameraTargetParams.recoil.y, cameraTargetParams.recoil.x, 0f);
         }
     }
     public class ProfessionalSkillLocator : MonoBehaviour
@@ -438,6 +517,10 @@ namespace GordonFreeman
         public GameObject specialsSelector;
         public GameObject selectedSelector;
         public GameObject mainSelector;
+        public bool isSpecialSelectorSelected
+        {
+            get { return selectedSelector == specialsSelector; }
+        }
         [HideInInspector] public List<HGButton> weaponButtons = new List<HGButton>();
         [HideInInspector] public List<HGButton> specialButtons = new List<HGButton>();
         [HideInInspector] public Player player;
@@ -453,13 +536,13 @@ namespace GordonFreeman
         public void ScrollUp()
         {
             selectedSelector.SetActive(false);
-            selectedSelector = selectedSelector == weaponSelector ? selectedSelector : weaponSelector;
+            selectedSelector = isSpecialSelectorSelected ? weaponSelector : specialsSelector;
             selectedSelector.SetActive(true);
         }
         public void ScrollDown()
         {
             selectedSelector.SetActive(false);
-            selectedSelector = selectedSelector == weaponSelector ? selectedSelector : weaponSelector;
+            selectedSelector = isSpecialSelectorSelected ? weaponSelector : specialsSelector;
             selectedSelector.SetActive(true);
         }
         public void SelectWeaponSelector()
@@ -518,9 +601,15 @@ namespace GordonFreeman
             if (selectedButton == null) return;
             selectedButton.Select();
         }
-        public void OnDisable()
+        public void DisableMainSelector()
         {
             SelectWeaponSelector();
+            mainSelector.SetActive(false);
+        }
+        public void EnableMainSelector()
+        {
+            SelectWeaponSelector();
+            mainSelector.SetActive(true);
         }
     }
     public class WeaponButtonSelectorComponent : MonoBehaviour
@@ -551,7 +640,7 @@ namespace GordonFreeman
             if (weaponWheelSelectorComponent == null) return;
             if (weaponWheelSelectorComponent.professionalCharacterComponent == null) return;
             weaponWheelSelectorComponent.professionalCharacterComponent.ApplyWeapon(professionalSkillLocator);
-            weaponWheelSelectorComponent.mainSelector.gameObject.SetActive(false);
+            weaponWheelSelectorComponent.DisableMainSelector();
         }
     }
     public class SpeicalButtonSelectorComponent : MonoBehaviour
@@ -565,7 +654,7 @@ namespace GordonFreeman
             if (weaponWheelSelectorComponent == null) return;
             if (weaponWheelSelectorComponent.professionalCharacterComponent == null) return;
             weaponWheelSelectorComponent.professionalCharacterComponent.ApplySpecial(genericSkill);
-            weaponWheelSelectorComponent.mainSelector.gameObject.SetActive(false);
+            weaponWheelSelectorComponent.DisableMainSelector();
         }
     }
     public class FreemanProjectileController : ProjectileController
@@ -682,6 +771,8 @@ namespace GordonFreeman
     public class FirstPersonCamera : MonoBehaviour
     {
         public CharacterBody characterBody;
+        public ProfessionalModelComponent professionalModelComponent;
+        public Camera weaponCamera;
         [HideInInspector] public PlayerCharacterMasterController playerCharacterMasterController;
         [HideInInspector] public CameraRigController cameraRigController;
         [HideInInspector] public Camera previousCameraObject;
@@ -694,7 +785,7 @@ namespace GordonFreeman
         [HideInInspector] public Transform weaponTransform;
         [HideInInspector] public Transform previousWeaponParentTransform;
         [HideInInspector] public Vector3 previousWeaponPosition;
-        [HideInInspector] public static Vector3 cameraWeaponPosition = new Vector3(0.1f, -0.1f, 0.1f);
+        [HideInInspector] public static Vector3 cameraWeaponPosition = Vector3.zero;
         private bool enabled = false;
         public static float textureScale = 2f;
         private bool waitToIncreaseDetails = true;
@@ -740,11 +831,13 @@ namespace GordonFreeman
                 previousCameraObject.gameObject.SetActive(false);
                 cameraRigController.sceneCam = currentCameraObject;
                 ProfessionalBodyComponent professionalBody = characterBody is ProfessionalBodyComponent ? characterBody as ProfessionalBodyComponent : null;
-                weaponTransform = professionalBody.professionalCharacterComponent.weaponObject.transform;
+                weaponTransform = weaponCamera.transform;
+                weaponCamera.enabled = true;
                 previousWeaponParentTransform = weaponTransform.parent;
                 previousWeaponPosition = weaponTransform.localPosition;
                 weaponTransform.SetParent(currentCameraObject.transform);
                 weaponTransform.localPosition = cameraWeaponPosition;
+                weaponTransform.localEulerAngles = Vector3.zero;
                 sceneCamera = currentCameraObject.GetComponent<SceneCamera>();
                 if (sceneCamera != null)
                     sceneCamera.cameraRigController = cameraRigController;
@@ -808,6 +901,7 @@ namespace GordonFreeman
             {
                 weaponTransform.SetParent(previousWeaponParentTransform);
                 weaponTransform.localPosition = previousWeaponPosition;
+                weaponTransform.localEulerAngles = Vector3.zero;
             }
             if (currentCameraObject) Destroy(currentCameraObject.gameObject);
             if (characterModel != null) characterModel.invisibilityCount--;
@@ -817,6 +911,7 @@ namespace GordonFreeman
                 previousCameraObject.gameObject.SetActive(true);
                 if (cameraRigController) cameraRigController.sceneCam = previousCameraObject;
             }
+            weaponCamera.enabled = false;
             enabled = false;
             DecreaseDetails();
         }
@@ -952,63 +1047,7 @@ namespace GordonFreeman
             }
         }
     }
-    public class FartJumpComponent : MonoBehaviour, IOnProjectileExplosionDetonate
-    {
-        public void OnProjectileExplosionDetonate(BlastAttack blastAttack, BlastAttack.Result result)
-        {
-            Chat.AddMessage("you smell like you farted: " + blastAttack.radius);
-        }
-    }
-    [CreateAssetMenu(menuName = "RoR2/SkillDef/Professional")]
-    public class ProfessionalSkillDef : SteppedSkillDef
-    {
-        public SkillDef secondarySkillDef;
-    }
-    [CreateAssetMenu(menuName = "RoR2/SkillDef/HeroSpecial")]
-    public class HeroSpecialSkillDef : SkillDef
-    {
-        public SkillDef[] skillsSelection;
-    }
-    [CreateAssetMenu(menuName = "RoR2/SkillDef/HookTracking")]
-    public class HookTarckingSkillDef : ProfessionalSkillDef
-    {
-        public override SkillDef.BaseSkillInstanceData OnAssigned([NotNull] GenericSkill skillSlot)
-        {
-            HookTracker hookTracker = skillSlot.GetOrAddComponent<HookTracker>();
-            hookTracker.ownerBody = skillSlot.characterBody;
-            hookTracker.inputBankTest = skillSlot.characterBody.inputBank;
-            return new HookTarckingSkillDef.InstanceData
-            {
-                hookTracker = hookTracker
-            };
-        }
-        private static bool HasTarget([NotNull] GenericSkill skillSlot)
-        {
-            HookTracker hookTracker = ((HookTarckingSkillDef.InstanceData)skillSlot.skillInstanceData).hookTracker;
-            if (hookTracker == null) return false;
-            if (skillSlot.characterBody.skillLocator && skillSlot.characterBody.skillLocator.primary == skillSlot || skillSlot.characterBody.skillLocator.secondary == skillSlot || skillSlot.characterBody.skillLocator.utility == skillSlot || skillSlot.characterBody.skillLocator.special == skillSlot)
-            {
-                hookTracker.active = true;
-            }
-            else
-            {
-                hookTracker.active = false;
-            }
-            return hookTracker.targetBody;
-        }
-        public override bool CanExecute([NotNull] GenericSkill skillSlot)
-        {
-            return HookTarckingSkillDef.HasTarget(skillSlot) && base.CanExecute(skillSlot);
-        }
-        public override bool IsReady([NotNull] GenericSkill skillSlot)
-        {
-            return base.IsReady(skillSlot) && HookTarckingSkillDef.HasTarget(skillSlot);
-        }
-        protected class InstanceData : SteppedSkillDef.InstanceData
-        {
-            public HookTracker hookTracker;
-        }
-    }
+    
     public class HookTracker : MonoBehaviour
     {
         public FixedConditionalWeakTable<Collider, CharacterBody> keyValuePairs = new FixedConditionalWeakTable<Collider, CharacterBody>();
@@ -1074,6 +1113,73 @@ namespace GordonFreeman
                 origin = inputBankTest ? inputBankTest.aimOrigin : transform.position,
                 direction = inputBankTest ? inputBankTest.aimDirection : transform.forward,
             };
+        }
+    }
+    [CreateAssetMenu(menuName = "RoR2/SkillDef/Professional")]
+    public class ProfessionalSkillDef : SteppedSkillDef
+    {
+        public SkillDef secondarySkillDef;
+        public WeaponModelDef weaponModel;
+    }
+    [CreateAssetMenu(menuName = "RoR2/SkillDef/HeroSpecial")]
+    public class HeroSpecialSkillDef : SkillDef
+    {
+        public SkillDef[] skillsSelection;
+    }
+    [CreateAssetMenu(menuName = "RoR2/SkillDef/HookTracking")]
+    public class HookTarckingSkillDef : ProfessionalSkillDef
+    {
+        public override SkillDef.BaseSkillInstanceData OnAssigned([NotNull] GenericSkill skillSlot)
+        {
+            HookTracker hookTracker = skillSlot.GetOrAddComponent<HookTracker>();
+            hookTracker.ownerBody = skillSlot.characterBody;
+            hookTracker.inputBankTest = skillSlot.characterBody.inputBank;
+            return new HookTarckingSkillDef.InstanceData
+            {
+                hookTracker = hookTracker
+            };
+        }
+        private static bool HasTarget([NotNull] GenericSkill skillSlot)
+        {
+            HookTracker hookTracker = ((HookTarckingSkillDef.InstanceData)skillSlot.skillInstanceData).hookTracker;
+            if (hookTracker == null) return false;
+            if (skillSlot.characterBody.skillLocator && skillSlot.characterBody.skillLocator.primary == skillSlot || skillSlot.characterBody.skillLocator.secondary == skillSlot || skillSlot.characterBody.skillLocator.utility == skillSlot || skillSlot.characterBody.skillLocator.special == skillSlot)
+            {
+                hookTracker.active = true;
+            }
+            else
+            {
+                hookTracker.active = false;
+            }
+            return hookTracker.targetBody;
+        }
+        public override bool CanExecute([NotNull] GenericSkill skillSlot)
+        {
+            return HookTarckingSkillDef.HasTarget(skillSlot) && base.CanExecute(skillSlot);
+        }
+        public override bool IsReady([NotNull] GenericSkill skillSlot)
+        {
+            return base.IsReady(skillSlot) && HookTarckingSkillDef.HasTarget(skillSlot);
+        }
+        protected class InstanceData : SteppedSkillDef.InstanceData
+        {
+            public HookTracker hookTracker;
+        }
+    }
+    
+    public class WeaponModel : MonoBehaviour
+    {
+        public Transform muzzleTransform;
+    }
+    [CreateAssetMenu(menuName = "GordonFreeman/WeaponModelDef")]
+    public class WeaponModelDef : ScriptableObject
+    {
+        public WeaponModel weaponModel;
+        public WeaponModel ApplyWeaponModel(ProfessionalModelComponent professionalModelComponent)
+        {
+            WeaponModel newWeaponModel = Instantiate(weaponModel, professionalModelComponent.weaponsTransform);
+            newWeaponModel.gameObject.SetActive(false);
+            return newWeaponModel;
         }
     }
 }

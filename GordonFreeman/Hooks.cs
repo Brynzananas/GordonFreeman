@@ -45,38 +45,32 @@ namespace GordonFreeman
             GlobalEventManager.onCharacterDeathGlobal += GlobalEventManager_onCharacterDeathGlobal;
             //IL.RoR2.PlayerCharacterMasterController.PollButtonInput += PlayerCharacterMasterController_PollButtonInput;
         }
-
         private static void PlayerCharacterMasterController_PollButtonInput(ILContext il)
         {
             ILCursor c = new ILCursor(il);
             ILCursor c2 = new ILCursor(il);
             ILLabel iLLabel = null;
             if (
-                c2.TryGotoNext(
-                    x => x.MatchRet()
-                )
-                &&
                 c.TryGotoNext(
                     x => x.MatchLdloc(11),
                     x => x.MatchLdcI4(7)
                 ))
             {
                 //c.Emit(OpCodes.Ldloc, 9);
-                Debug.Log(c.Emit(OpCodes.Ldloc, 13));
-                Debug.Log(c2.Next);
+                c.Emit(OpCodes.Ldloc, 13);
                 c.EmitDelegate<Func<bool, bool>>((cb) =>
                 {
                     Debug.Log("focus: " + cb);
                     return cb;
                 });
-                c.Emit(OpCodes.Brfalse_S, c2.Next);
+                c.Emit(OpCodes.Brfalse_S, c.Next);
+                c.Emit(OpCodes.Ret);
             }
             else
             {
                 Debug.LogError(il.Method.Name + " IL Hook failed!");
             }
         }
-
         private static void GlobalEventManager_onCharacterDeathGlobal(DamageReport obj)
         {
             CharacterBody attackerBody = obj.attackerBody;
@@ -129,6 +123,7 @@ namespace GordonFreeman
                 }
                 yield return null;
             }
+            Debug.Log("Materials have been collected");
             receivedMaterials = true;
             OnMaterialsCollected?.Invoke();
             yield break;
@@ -302,7 +297,7 @@ namespace GordonFreeman
         }
         private static void MusicController_pickTrackHook(MusicController musicController, ref MusicTrackDef newTrack)
         {
-           if(Main.rampgage && Main.currentMusicTrack) newTrack = Main.currentMusicTrack;
+           if(Main.rampage && Main.currentMusicTrack) newTrack = Main.currentMusicTrack;
         }
         private static void MusicController_PickCurrentTrack(ILContext il)
         {
@@ -317,7 +312,7 @@ namespace GordonFreeman
                 //c.Emit(OpCodes.Ldfld, typeof(Main).GetField(nameof(Main.bloodlust)));
                 c.EmitDelegate<Func<bool, bool>>((cb) =>
                 {
-                    return (Main.rampgage);
+                    return (Main.rampage);
                 });
                 //c.Emit(OpCodes.Brfalse_S);
                 //c.Emit(OpCodes.Ldc_I4_1);

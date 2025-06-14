@@ -46,7 +46,7 @@ namespace GordonFreeman
         private static bool _rampage = false;
         public static MusicTrackDef currentMusicTrack;
         public static bool enableUltrakillMusic = false;
-        public static bool rampgage
+        public static bool rampage
         {
             get
             {

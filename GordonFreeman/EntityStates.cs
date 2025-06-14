@@ -23,6 +23,7 @@ namespace GordonFreeman
         public ProfessionalBodyComponent professionalBodyComponent;
         public ProfessionalCharacterMain professionalCharacterMain;
         public GameObject weaponObject { get { return professionalCharacterComponent && professionalCharacterComponent.weaponObject ? professionalCharacterComponent.weaponObject : gameObject; } }
+        public Transform muzzleTransform { get { return professionalCharacterComponent?.modelComponent?.childLocator?.FindChild("Muzzle") ?? weaponObject.transform; } }
         public override void OnEnter()
         {
             base.OnEnter();
@@ -64,13 +65,14 @@ namespace GordonFreeman
         public abstract bool crit { get; }
         public virtual void FireBullet(Ray ray, string targetMuzzle)
         {
+            targetMuzzle = "Muzzle";
             FireBulletStart(ray, targetMuzzle);
             if (base.isAuthority)
             {
                 BulletAttack bulletAttack = new BulletAttack
                 {
                     owner = base.gameObject,
-                    weapon = weaponObject,
+                    weapon = gameObject,
                     origin = ray.origin,
                     aimVector = ray.direction,
                     minSpread = minSpread,
@@ -92,6 +94,7 @@ namespace GordonFreeman
                     trajectoryAimAssistMultiplier = trajectoryAimAssistMultiplier,
                     damageType = damageType
                 };
+                //bulletAttack.SetWeaponOverride(weaponObject);
                 ModifyBulletAttack(ref bulletAttack);
                 bulletAttack.Fire();
             }
@@ -417,7 +420,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => FirePistol2.tracerEffectPrefab;
         public override GameObject hitEffectPrefab => FirePistol2.hitEffectPrefab;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => FirePistol2.firePistolSoundString;
+        public override string firePistolSoundString => SMGFire.playSoundString;
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -737,14 +740,14 @@ namespace GordonFreeman
             ProjectileController projectileController = hitInfo.collider.GetComponent<ProjectileController>();
             if (projectileController)
             {
+                ProjectileDamage projectileDamage = projectileController.GetComponent<ProjectileDamage>();
                 if (isAuthority)
                 {
-                    ProjectileDamage projectileDamage = projectileController.GetComponent<ProjectileDamage>();
                     BlastAttack blastAttack = new BlastAttack
                     {
                         attacker = gameObject,
                         attackerFiltering = AttackerFiltering.Default,
-                        baseDamage = damage,
+                        baseDamage = projectileDamage.damage + damageStat * damage,
                         crit = projectileDamage ? projectileDamage.crit : false || bulletAttack.isCrit,
                         damageColorIndex = DamageColorIndex.Default,
                         damageType = projectileDamage ? projectileDamage.damageType.damageSource = DamageSource.Primary : DamageTypeCombo.GenericPrimary,
@@ -752,11 +755,28 @@ namespace GordonFreeman
                         losType = BlastAttack.LoSType.None,
                         position = hitInfo.point,
                         falloffModel = BlastAttack.FalloffModel.None,
-                        radius = projectileController.rigidbody ? projectileController.rigidbody.velocity.magnitude * 2: 12f,
+                        radius = projectileController.rigidbody ? projectileController.rigidbody.velocity.magnitude / 2f: 12f,
                         teamIndex = teamComponent ? teamComponent.teamIndex : TeamIndex.None,
                         procCoefficient = 1f,
                     };
                     blastAttack.Fire();
+                }
+                if (NetworkServer.active)
+                {
+                    DamageInfo damageInfo = new DamageInfo
+                    {
+                        attacker = gameObject,
+                        canRejectForce = true,
+                        crit = projectileDamage ? projectileDamage.crit : false || bulletAttack.isCrit,
+                        damage = projectileDamage.damage + damageStat * damage,
+                        damageColorIndex = projectileDamage.damageColorIndex,
+                        damageType = projectileDamage.damageType,
+                        inflictor = projectileController.gameObject,
+                        position = projectileController.transform.position,
+                        procCoefficient = 1f,
+                    };
+                    DamageReport damageReport = new DamageReport(damageInfo, healthComponent, damageInfo.damage, healthComponent.combinedHealth);
+                    GlobalEventManager.instance.OnCharacterDeath(damageReport);
                 }
                 EffectData effectData = new EffectData
                 {
@@ -770,7 +790,6 @@ namespace GordonFreeman
                     Destroy(projectileExplosion);
                 }
                 Destroy(projectileController.gameObject);
-                
             }
             return false;
         }
@@ -980,7 +999,7 @@ namespace GordonFreeman
             laser = GameObject.Instantiate(GluonBeamEffect);
             childLocator = laser.GetComponent<ChildLocator>();
             startTransform = childLocator.FindChild("Start");
-            startTransform.SetParent(weaponObject.transform, false);
+            startTransform.SetParent(muzzleTransform, false);
             endTransform = childLocator.FindChild("End");
             Util.PlaySound(GluonGunFire.playSoundString, gameObject);
         }

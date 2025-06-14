@@ -67,6 +67,10 @@ namespace GordonFreeman
             foreach (var projectile in projectiles)
             {
                 ProjectileExplosion projectileExplosion = projectile.GetComponent<ProjectileExplosion>();
+                if (projectileExplosion != null)
+                {
+                    if (projectileExplosion.explosionEffect == null) projectileExplosion.explosionEffect = Assets.Explosion;
+                }
             }
             //Assets.LoadSoundBanks();
             yield break;
