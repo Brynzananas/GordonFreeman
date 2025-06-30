@@ -15,6 +15,7 @@ using UnityEngine;
 using HarmonyLib;
 using MonoMod.Cil;
 using Mono.Cecil.Cil;
+using BepInEx.Configuration;
 
 [assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
 [assembly: HG.Reflection.SearchableAttribute.OptIn]
@@ -26,12 +27,13 @@ namespace GordonFreeman
 {
     [BepInPlugin(ModGuid, ModName, ModVer)]
     [BepInDependency(R2API.R2API.PluginGUID, R2API.R2API.PluginVersion)]
-    [BepInDependency(R2API.Networking.NetworkingAPI.PluginGUID)]
+    //[BepInDependency(R2API.Networking.NetworkingAPI.PluginGUID)]
     [BepInDependency(R2API.SkillsAPI.PluginGUID)]
     [BepInDependency(BrynzaAPI.BrynzaAPI.ModGuid)]
-    [BepInDependency(BodyModelAdditionsAPI.Main.ModGuid)]
+    //[BepInDependency(BodyModelAdditionsAPI.Main.ModGuid)]
     [BepInDependency(R2API.SoundAPI.PluginGUID)]
-    [BepInDependency("com.weliveinasociety.CustomEmotesAPI", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency(ModCompatabilities.EmoteCompatability.GUID, BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency(ModCompatabilities.RiskOfOptionsCompatability.GUID, BepInDependency.DependencyFlags.SoftDependency)]
     [NetworkCompatibility(CompatibilityLevel.EveryoneMustHaveMod, VersionStrictness.EveryoneNeedSameModVersion)]
     //[R2APISubmoduleDependency(nameof(CommandHelper))]
     [System.Serializable]
@@ -41,7 +43,9 @@ namespace GordonFreeman
         public const string ModName = "Professional";
         public const string ModVer = "0.0.1";
         public static bool emotesEnabled;
+        public static bool riskOfOptionsEnabled;
         public static Main instance { get; private set; }
+        public static ConfigFile configFile { get; private set; }
         public static BodyIndex ProfessionalBodyIndex;
         private static bool _rampage = false;
         public static MusicTrackDef currentMusicTrack;
@@ -56,7 +60,16 @@ namespace GordonFreeman
             {
                 _rampage = value;
                 if(value == true)
-                    currentMusicTrack = enableUltrakillMusic ? Assets.UltrakillTrack: Assets.HalfLifeTrack;
+                {
+                    string configValue = Configs.MusicPicker.Value.Trim().ToLower();
+                    if (Assets.stringToMusic.ContainsKey(configValue))
+                    {
+                        currentMusicTrack = Assets.stringToMusic[configValue];
+                        return;
+                    }
+                    currentMusicTrack = Assets.HalfLifeTrack;
+                }
+                    
                 //currentMusicTrack = Assets.MusicTracks[UnityEngine.Random.Range(0, Assets.MusicTracks.Count)];
             }
         }
@@ -65,12 +78,14 @@ namespace GordonFreeman
         public static BepInEx.PluginInfo PInfo { get; private set; }
         public void Awake()
         {
+            configFile = Config;
             PInfo = Info;
             instance = this;
             Assets.Init();
             Hooks.Init();
             emotesEnabled = BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(ModCompatabilities.EmoteCompatability.GUID);
-            if(emotesEnabled ) ModCompatabilities.EmoteCompatability.Init();
+            riskOfOptionsEnabled = BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(ModCompatabilities.RiskOfOptionsCompatability.GUID);
+            if (emotesEnabled ) ModCompatabilities.EmoteCompatability.Init();
         }
     }
 }

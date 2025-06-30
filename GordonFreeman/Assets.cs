@@ -15,6 +15,7 @@ using EmotesAPI;
 using BodyModelAdditionsAPI;
 using BepInEx;
 using static R2API.SoundAPI.Music;
+using BrynzaAPI;
 
 namespace GordonFreeman
 {
@@ -44,6 +45,8 @@ namespace GordonFreeman
         public static GameObject HookChainEffect;
         public static GameObject GluonBeamEffect;
         public static GameObject UtilitySkillCharge;
+        public static GameObject SniperTargetTest;
+        public static Material IndicatorMaterial;
         public static ModelPartDef YellowPaint;
         public static Material YellowPaintMaterial;
         public static ModelPartDef BlackPaint;
@@ -105,7 +108,8 @@ namespace GordonFreeman
         public static SkillDef Red;
         public static SoundAPI.Music.CustomMusicTrackDef HalfLifeTrack;
         public static SoundAPI.Music.CustomMusicTrackDef UltrakillTrack;
-        public static List<MusicTrackDef> MusicTracks = new List<MusicTrackDef>();
+        public static List<CustomMusicTrackDef> customMusicTracks = new List<CustomMusicTrackDef>();
+        public static Dictionary<string, MusicTrackDef> stringToMusic = new Dictionary<string, MusicTrackDef>();
         public static GordonFreemanSound CrossbowFire = new GordonFreemanSound("hot_rebar_fire_mix");
         public static GordonFreemanSound CrossbowReload = new GordonFreemanSound("hot_rebar_reload");
         public static GordonFreemanSound GluonGunFire = new GordonFreemanSound("gluon_fire");
@@ -147,17 +151,24 @@ namespace GordonFreeman
             customMusicData.InitBankName = "GordonFreemanInit.bnk";
             customMusicData.PlayMusicSystemEventName = "Play_Gordon_Freeman_Music_System";
             customMusicData.SoundBankName = "GordonFreemanMusic.bnk";
-            HalfLifeTrack = CreateCustomMusicTrack("hf1", 4187838533, 3489674728);
-            UltrakillTrack = CreateCustomMusicTrack("Ultrakill", 4187838533, 3917831853);
+            HalfLifeTrack = CreateCustomMusicTrack("HalfLife", "GordonFreemanMusic", 4187838533, 3489674728);
+            //UltrakillTrack = CreateCustomMusicTrack("ULTRAKILL", 4187838533, 3917831853);
             bool soundRegistered = SoundAPI.Music.Add(customMusicData);
             Debug.Log("soundRegistered: " + soundRegistered);
             ProfessionalBody = assetBundle.LoadAsset<GameObject>("Assets/Gordon Freeman/Character/ProfessionalBody.prefab");
             ProfessionalBodyComponent professionalBodyComponent = ProfessionalBody.GetComponent<ProfessionalBodyComponent>();
+            CharacterMotor characterMotor = ProfessionalBody.GetComponent<CharacterMotor>();
+            characterMotor.SetKeepVelocityOnMoving(true);
+            characterMotor.SetConsistentAcceleration(10f);
+            characterMotor.SetBunnyHop(true);
             professionalBodyComponent.AddModdedBodyFlag(BrynzaAPI.Assets.SprintAllTime);
             professionalBodyComponent.preferredPodPrefab = LegacyResourcesAPI.Load<GameObject>("Prefabs/NetworkedObjects/SurvivorPod");
             professionalBodyComponent._defaultCrosshairPrefab = LegacyResourcesAPI.Load<GameObject>("Prefabs/Crosshair/SimpleDotCrosshair");
+            professionalBodyComponent.SetBaseWallJumpCount(3);
             GameObject gameObject = professionalBodyComponent.GetComponent<ModelLocator>().modelTransform.gameObject;
             gameObject.GetComponent<FootstepHandler>().footstepDustPrefab = LegacyResourcesAPI.Load<GameObject>("Prefabs/GenericFootstepDust");
+            ModelSkinController modelSkinController = gameObject.GetComponent<ModelSkinController>();
+            Array.Resize(ref modelSkinController.skins, 1);
             GenericSkill[] genericSkills = ProfessionalBody.GetComponents<GenericSkill>();
             foreach (var item in genericSkills)
             {
@@ -168,7 +179,6 @@ namespace GordonFreeman
             }
             bodies.Add(ProfessionalBody);
             EmotePrefab = assetBundle.LoadAsset<GameObject>("Assets/Gordon Freeman/Character/HeroEmotes.prefab");
-            
             BanditRevolverTracer = Addressables.LoadAssetAsync<GameObject>("RoR2/Base/Bandit2/TracerBanditPistol.prefab").WaitForCompletion();
             BanditRevolverMuzzleFlash = Addressables.LoadAssetAsync<GameObject>("RoR2/Base/Bandit2/MuzzleflashBandit2.prefab").WaitForCompletion();
             BanditRevolverHit = Addressables.LoadAssetAsync<GameObject>("RoR2/Base/Bandit2/HitsparkBandit2Pistol.prefab").WaitForCompletion();
@@ -178,8 +188,10 @@ namespace GordonFreeman
             MultRebarTracer = Addressables.LoadAssetAsync<GameObject>("RoR2/Base/Toolbot/TracerToolbotRebar.prefab").WaitForCompletion();
             StoneTitanLaser = Addressables.LoadAssetAsync<GameObject>("RoR2/Base/Titan/LaserTitan.prefab").WaitForCompletion();
             Explosion = Addressables.LoadAssetAsync<GameObject>("RoR2/Base/Toolbot/OmniExplosionVFXToolbotQuick.prefab").WaitForCompletion();
+            IndicatorMaterial = Addressables.LoadAssetAsync<Material>("RoR2/Base/Common/VFX/matAreaIndicatorRim.mat").WaitForCompletion();
             HookChainEffect = assetBundle.LoadAsset<GameObject>("Assets/Gordon Freeman/Effects/HookChain.prefab");
             GluonBeamEffect = assetBundle.LoadAsset<GameObject>("Assets/Gordon Freeman/Effects/GluonGunBeam.prefab");
+            SniperTargetTest = assetBundle.LoadAsset<GameObject>("Assets/Gordon Freeman/HUD/FreemanSniperTarget.prefab");
             CoinProjectile = assetBundle.LoadAsset<GameObject>("Assets/Gordon Freeman/Projectiles/Coin/CoinProjectile.prefab");
             networkPrefabs.Add(CoinProjectile);
             projectiles.Add(CoinProjectile);
@@ -202,6 +214,7 @@ namespace GordonFreeman
             survivors.Add(ProfessionalDef);
             ProfessionalDefaultSkin = assetBundle.LoadAsset<SkinDef>("Assets/Gordon Freeman/Character/ProfessionalDefault.asset");
             HeroBlackOpsSkin = assetBundle.LoadAsset<SkinDef>("Assets/Gordon Freeman/Character/HeroBlackOps.asset");
+            //GameObject.Destroy(HeroBlackOpsSkin);
             CommandoPistolPrimary = Addressables.LoadAssetAsync<SkillDef>("RoR2/Base/Commando/CommandoBodyFirePistol.asset").WaitForCompletion();
             ToolbotRebarPrimary = Addressables.LoadAssetAsync<SkillDef>("RoR2/Base/Toolbot/ToolbotBodyFireSpear.asset").WaitForCompletion();
             ArtificerPlasmaPrimary = Addressables.LoadAssetAsync<SkillDef>("RoR2/Base/Mage/MageBodyFireLightningBolt.asset").WaitForCompletion();
@@ -361,23 +374,40 @@ namespace GordonFreeman
                 addContentPackProvider(new ContentPacks());
             };
         }
-        public static SoundAPI.Music.CustomMusicTrackDef CreateCustomMusicTrack(string cachedName, uint groupId, uint stateId)
+        public static SoundAPI.Music.CustomMusicTrackDef CreateCustomMusicTrack(string cachedName, string musicBankName, uint groupId, uint stateId)
         {
             SoundAPI.Music.CustomMusicTrackDef customMusicTrackDef = ScriptableObject.CreateInstance<SoundAPI.Music.CustomMusicTrackDef>();
             customMusicTrackDef.cachedName = cachedName;
-            customMusicTrackDef.SoundBankName = "GordonFreemanMusic";
+            customMusicTrackDef.SoundBankName = musicBankName;
             SoundAPI.Music.CustomMusicTrackDef.CustomState customState = new SoundAPI.Music.CustomMusicTrackDef.CustomState();
             customState.GroupId = groupId;
             customState.StateId = stateId;
             SoundAPI.Music.CustomMusicTrackDef.CustomState customState2 = new SoundAPI.Music.CustomMusicTrackDef.CustomState();
             customState2.GroupId = 792781730;
             customState2.StateId = 89505537;
-            MusicTracks.Add(customMusicTrackDef);
+            customMusicTracks.Add(customMusicTrackDef);
             if (customMusicTrackDef.CustomStates == null) customMusicTrackDef.CustomStates = new List<SoundAPI.Music.CustomMusicTrackDef.CustomState>();
             customMusicTrackDef.CustomStates.Add(customState);
             customMusicTrackDef.CustomStates.Add(customState2);
             musics.Add(customMusicTrackDef);
+            string musicString = cachedName.ToLower().Trim();
+            stringToMusic.Add(musicString, customMusicTrackDef);
             return customMusicTrackDef;
+        }
+        public static CustomMusicData CreateSoundbank(PluginInfo pluginInfo, string path, string musicBankName, string initBankName, string playEventString)
+        {
+            return CreateSoundbank(pluginInfo.Metadata, path, musicBankName, initBankName, playEventString);
+        }
+        public static CustomMusicData CreateSoundbank(BepInPlugin bepInPlugin, string path, string musicBankName, string initBankName, string playEventString)
+        {
+            SoundAPI.Music.CustomMusicData customMusicData = new SoundAPI.Music.CustomMusicData();
+            customMusicData.BanksFolderPath = path;
+            customMusicData.BepInPlugin = bepInPlugin;
+            customMusicData.InitBankName = initBankName;
+            customMusicData.PlayMusicSystemEventName = playEventString;
+            customMusicData.SoundBankName = musicBankName;
+            SoundAPI.Music.Add(customMusicData);
+            return customMusicData;
         }
         public class GordonFreemanSound
         {
@@ -393,49 +423,11 @@ namespace GordonFreeman
                 stopSound.eventName = stopSoundString;
                 sounds.Add(stopSound);
             }
-        public string name;
-        public string playSoundString;
-        public string stopSoundString;
-        private NetworkSoundEventDef playSound;
-        private NetworkSoundEventDef stopSound;
-    }
-        //private static void Item_onSkillChanged(GenericSkill obj)
-        //{
-        //    BodyModelAdditionsAPI.Main.ActivePartsComponent activePartsComponent = obj?.characterBody?.modelLocator?.modelBaseTransform?.GetComponent<BodyModelAdditionsAPI.Main.ActivePartsComponent>();
-        //    if (activePartsComponent != null)
-        //    {
-        //        activePartsComponent.ApplyParts();
-        //    }
-        //}
-        public static void LoadSoundBanks()
-        {
-            var akResult = AkSoundEngine.AddBasePath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Main.PInfo.Location), "soundbanks"));
-            if (akResult == AKRESULT.AK_Success)
-            {
-                Debug.Log("Added base path");
-            }
-            else
-            {
-                Debug.LogError("Erroring adding soundbanks path");
-            }
-            akResult = AkSoundEngine.LoadBank("GordonFreemanInit.bnk", out var _);
-            if (akResult == AKRESULT.AK_Success)
-            {
-                Debug.Log("Added init soundbank");
-            }
-            else
-            {
-                Debug.LogError("Erroring adding init soundbank");
-            }
-            akResult = AkSoundEngine.LoadBank("GordonFreeman.bnk", out var _);
-            if (akResult == AKRESULT.AK_Success)
-            {
-                Debug.Log("Added music soundbank");
-            }
-            else
-            {
-                Debug.LogError("Erroring adding music soundbank");
-            }
+            public string name;
+            public string playSoundString;
+            public string stopSoundString;
+            private NetworkSoundEventDef playSound;
+            private NetworkSoundEventDef stopSound;
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using BrynzaAPI;
 using EntityStates;
 using EntityStates.Commando.CommandoWeapon;
+using R2API;
 using Rewired;
 using RoR2;
 using RoR2.HudOverlay;
@@ -13,7 +14,10 @@ using System.Linq;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
+using static BrynzaAPI.SniperHurtboxTracker;
 using static GordonFreeman.Assets;
+using static GordonFreeman.FireHook;
+using static Rewired.ComponentControls.Effects.RotateAroundAxis;
 
 namespace GordonFreeman
 {
@@ -42,7 +46,7 @@ namespace GordonFreeman
         public abstract GameObject tracerEffectPrefab { get; }
         public abstract GameObject hitEffectPrefab { get; }
         public abstract GameObject weapon { get; }
-        public abstract string firePistolSoundString { get; }
+        public abstract string fireSoundString { get; }
         public abstract float minVerticalRecoil { get; }
         public abstract float maxVerticalRecoil { get; }
         public abstract float minHorizontalRecoil { get; }
@@ -102,8 +106,8 @@ namespace GordonFreeman
         }
         public virtual void FireBulletStart(Ray ray, string targetMuzzle)
         {
-            if (firePistolSoundString != "")
-                Util.PlaySound(firePistolSoundString, base.gameObject);
+            if (fireSoundString != "")
+                Util.PlaySound(fireSoundString, base.gameObject);
             if (muzzleEffectPrefab)
             {
                 EffectManager.SimpleMuzzleFlash(muzzleEffectPrefab, base.gameObject, targetMuzzle, false);
@@ -160,11 +164,13 @@ namespace GordonFreeman
     public abstract class FreemanScope : BaseFreemanState
     {
         public abstract bool toExecute { get; }
-        public abstract SkillDef skillToUse { get; }
+        public abstract Type stateToEnter { get; }
         public abstract GameObject crosshairOverrideObject { get; }
         public abstract GameObject scopeOverlayObject { get; }
+        public abstract GameObject sniperTargetObject { get; }
         public OverlayController overlayController;
         public CrosshairUtils.OverrideRequest overrideRequest;
+        public BrynzaAPI.SniperHurtboxTracker.SniperHurtboxTrackerParams sniperHurtboxTrackerParams;
         public override void OnEnter()
         {
             base.OnEnter();
@@ -178,12 +184,25 @@ namespace GordonFreeman
             {
                 overrideRequest = CrosshairUtils.RequestOverrideForBody(base.characterBody, this.crosshairOverrideObject, CrosshairUtils.OverridePriority.Skill);
             }
+            if (isAuthority)
+            {
+                sniperHurtboxTrackerParams = new SniperHurtboxTrackerParams
+                {
+                    trackerPrefab = sniperTargetObject,
+                    priority = 2
+                };
+                BrynzaAPI.Utils.AddSniperHurtboxTracker(sniperHurtboxTrackerParams);
+            }
         }
         public override void OnExit()
         {
             this.RemoveOverlay();
             if (overrideRequest != null)
                 overrideRequest.Dispose();
+            if (isAuthority)
+            {
+                BrynzaAPI.Utils.RemoveSniperHurtboxTracker(sniperHurtboxTrackerParams);
+            }
             base.OnExit();
         }
         protected void SetScopeAlpha(float alpha)
@@ -198,9 +217,9 @@ namespace GordonFreeman
             base.FixedUpdate();
             if (base.isAuthority)
             {
-                if (toExecute && skillToUse.CanExecute(activatorSkillSlot))
+                if (toExecute)
                 {
-                    skillToUse.OnExecute(activatorSkillSlot);
+                    outer.SetState(EntityStateCatalog.InstantiateState(stateToEnter));
                 }
                 if (!base.IsKeyDownAuthority())
                 {
@@ -224,7 +243,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => FirePistol2.tracerEffectPrefab;
         public override GameObject hitEffectPrefab => FirePistol2.hitEffectPrefab;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => PistolFire.playSoundString;
+        public override string fireSoundString => PistolFire.playSoundString;
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -284,7 +303,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => FirePistol2.tracerEffectPrefab;
         public override GameObject hitEffectPrefab => FirePistol2.hitEffectPrefab;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => PistolFire.playSoundString;
+        public override string fireSoundString => PistolFire.playSoundString;
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -356,7 +375,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => BanditRevolverTracer;
         public override GameObject hitEffectPrefab => BanditRevolverHit;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => RevolverFire.playSoundString;
+        public override string fireSoundString => RevolverFire.playSoundString;
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -420,7 +439,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => FirePistol2.tracerEffectPrefab;
         public override GameObject hitEffectPrefab => FirePistol2.hitEffectPrefab;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => SMGFire.playSoundString;
+        public override string fireSoundString => SMGFire.playSoundString;
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -493,7 +512,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => CaptainShotgunTracer;
         public override GameObject hitEffectPrefab => CaptainShotgunHit;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => ShotgunFire.playSoundString;
+        public override string fireSoundString => ShotgunFire.playSoundString;
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -541,7 +560,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => CaptainShotgunTracer;
         public override GameObject hitEffectPrefab => CaptainShotgunHit;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => ShotgunFire.playSoundString;
+        public override string fireSoundString => ShotgunFire.playSoundString;
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -615,9 +634,10 @@ namespace GordonFreeman
     public class ScopeRebar : FreemanScope
     {
         public override bool toExecute => inputBank && inputBank.skill1.justPressed;
-        public override SkillDef skillToUse => CrossbowSecondary;
         public override GameObject crosshairOverrideObject => null;
         public override GameObject scopeOverlayObject => null;
+        public override GameObject sniperTargetObject => Assets.SniperTargetTest;
+        public override Type stateToEnter => typeof(FireRebar);
     }
     public class FireRebar : FreemanFireProjectile
     {
@@ -654,7 +674,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => MultRebarTracer;
         public override GameObject hitEffectPrefab => CaptainShotgunHit;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => TauCannonFire.playSoundString;
+        public override string fireSoundString => TauCannonFire.playSoundString;
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -700,13 +720,13 @@ namespace GordonFreeman
         public override void OnEnter()
         {
             base.OnEnter();
-            damage = damageCoefficient;
+            damage = damageCoefficient * damageStat;
             this.duration = baseDuration / this.attackSpeedStat;
             Ray ray = GetAimRay();
             base.StartAimMode(ray, 3f, false);
             this.FireBullet(ray, "");
-            if(characterMotor && isAuthority)
-            base.characterBody.characterMotor.ApplyForce(-1f * ray.direction * charges, false, false);
+            if (characterMotor && isAuthority)
+                characterMotor.velocity += ray.direction * -damageCoefficient;
             charges = 0;
         }
         public override void ModifyBulletAttack(ref BulletAttack bulletAttack)
@@ -747,7 +767,7 @@ namespace GordonFreeman
                     {
                         attacker = gameObject,
                         attackerFiltering = AttackerFiltering.Default,
-                        baseDamage = projectileDamage.damage + damageStat * damage,
+                        baseDamage = projectileDamage.damage + damage,
                         crit = projectileDamage ? projectileDamage.crit : false || bulletAttack.isCrit,
                         damageColorIndex = DamageColorIndex.Default,
                         damageType = projectileDamage ? projectileDamage.damageType.damageSource = DamageSource.Primary : DamageTypeCombo.GenericPrimary,
@@ -763,12 +783,13 @@ namespace GordonFreeman
                 }
                 if (NetworkServer.active)
                 {
+                    HealthComponent healthComponent = projectileController.owner ? projectileController.owner.GetComponent<HealthComponent>() : null;
                     DamageInfo damageInfo = new DamageInfo
                     {
                         attacker = gameObject,
                         canRejectForce = true,
                         crit = projectileDamage ? projectileDamage.crit : false || bulletAttack.isCrit,
-                        damage = projectileDamage.damage + damageStat * damage,
+                        damage = projectileDamage.damage + damage,
                         damageColorIndex = projectileDamage.damageColorIndex,
                         damageType = projectileDamage.damageType,
                         inflictor = projectileController.gameObject,
@@ -776,6 +797,7 @@ namespace GordonFreeman
                         procCoefficient = 1f,
                     };
                     DamageReport damageReport = new DamageReport(damageInfo, healthComponent, damageInfo.damage, healthComponent.combinedHealth);
+                    if(damageInfo.attacker != healthComponent.gameObject)
                     GlobalEventManager.instance.OnCharacterDeath(damageReport);
                 }
                 EffectData effectData = new EffectData
@@ -808,8 +830,9 @@ namespace GordonFreeman
     {
         public float currentCharge = 0f;
         public int charge;
-        public static int maxCharge = 30;
-        public uint soundID;
+        public float stopwatch = 0f;
+        public static float baseMaxChargeTime = 4f;
+        public static float baseMaxFullChargeTime = 10f;
         public static int chargePerSecond = 5;
         public override void OnEnter()
         {
@@ -827,8 +850,8 @@ namespace GordonFreeman
             Ray ray = GetAimRay();
             base.StartAimMode(ray, 3f, false);
             currentCharge += Time.fixedDeltaTime;
-            
-            if(currentCharge > 1f / (float)chargePerSecond)
+            stopwatch += Time.fixedDeltaTime;
+            if (stopwatch < baseMaxChargeTime && currentCharge > 1f / (float)chargePerSecond / characterBody.attackSpeed)
             {
                 if (isAuthority)
                 {
@@ -846,7 +869,7 @@ namespace GordonFreeman
                 currentCharge = 0f;
             }
             bool shoot = skillLocator && skillLocator.primary && skillLocator.primary.stock > 0;    
-            if (!base.isAuthority || IsKeyDownAuthority() && charge < maxCharge && shoot)
+            if (!base.isAuthority || IsKeyDownAuthority() && stopwatch < baseMaxFullChargeTime && shoot)
             {
                 return;
             }
@@ -904,35 +927,52 @@ namespace GordonFreeman
     public class FreemanDash : BaseFreemanState
     {
         public static float baseDuration = 0.125f;
-        public static float baseSpeed = 64f;
+        public static float baseSpeed = 96f;
         public float duration;
         public float speed;
         public Vector3 direction = Vector3.zero;
+        public HurtBoxGroup hurtBoxGroup;
+        private bool isDashing = false;
         public override void OnEnter()
         {
             base.OnEnter();
-            if (characterBody && NetworkServer.active) characterBody.AddBuff(RoR2Content.Buffs.HiddenInvincibility);
+            bool noMoveInput = false;
+            direction = inputBank ? inputBank.moveVector : (characterMotor ? characterMotor.moveDirection : (rigidbody ? rigidbody.velocity.normalized : transform.eulerAngles));
+            if (direction == Vector3.zero)
+            {
+                noMoveInput = true;
+                direction = inputBank ? inputBank.aimDirection : transform.forward;
+            }
+            if (noMoveInput)
+            {
+                outer.SetStateToMain();
+                return;
+            }
+            direction = direction.normalized;
             Util.PlaySound(EntityStates.Commando.DodgeState.dodgeSoundString, base.gameObject);
             speed = baseSpeed;
             duration = baseDuration;
-            direction = inputBank ? inputBank.moveVector : (characterMotor ? characterMotor.moveDirection : (rigidbody ? rigidbody.velocity.normalized : transform.eulerAngles));
-            if(direction == Vector3.zero) direction = inputBank ? inputBank.aimDirection : transform.forward;
-            direction = direction.normalized;
-            if (!isAuthority) return;
+            hurtBoxGroup = GetModelTransform() ? GetModelTransform().GetComponent<HurtBoxGroup>() : null;
+            if (hurtBoxGroup != null)
+                hurtBoxGroup.hurtBoxesDeactivatorCounter++;
+            isDashing = true;
         }
         public override void OnExit()
         {
             base.OnExit();
-            if (characterBody && NetworkServer.active) characterBody.RemoveBuff(RoR2Content.Buffs.HiddenInvincibility);
-            if (isAuthority)
+            if (isDashing && isAuthority) 
                 if (characterMotor)
                 {
                     characterMotor.SetVelocityOverride(Vector3.zero);
+                    characterMotor.velocity = direction * moveSpeedStat;
+                    characterMotor.disableAirControlUntilCollision = false;
                 }
                 else if (rigidbody)
                 {
                     rigidbody.velocity = direction * moveSpeedStat;
-                }
+                } 
+            if (hurtBoxGroup != null)
+                hurtBoxGroup.hurtBoxesDeactivatorCounter--;
         }
         public override void FixedUpdate()
         {
@@ -953,6 +993,109 @@ namespace GordonFreeman
             }
             this.outer.SetNextStateToMain();
         }
+        public override InterruptPriority GetMinimumInterruptPriority()
+        {
+            return InterruptPriority.Any;
+        }
+    }
+    public class FreemanSlam : BaseFreemanState
+    {
+        public static float slamRadius = 24f;
+        public static float slamSpeed = 3f;
+        public static float afterSlamTime = 2f;
+        public float slamTime;
+        public float slamDistance = 10f;
+        public float slamForce => (slamDistance / afterSlamTime) - (Physics.gravity.y * afterSlamTime / 2f);
+        public bool removeBuff = false;
+        public override void OnEnter()
+        {
+            base.OnEnter();
+            if (isAuthority)
+            {
+                if (characterMotor)
+                {
+                    if (characterMotor.isGrounded)
+                    {
+                        outer.SetStateToMain();
+                        return;
+                    }
+                    characterMotor.onHitGroundAuthority += CharacterMotor_onHitGroundAuthority;
+                    if (Physics.Raycast(characterBody.footPosition, new Vector3(0f, Physics.gravity.y, 0f), out var hitInfo, 99999f, LayerIndex.world.mask + LayerIndex.defaultLayer.mask + LayerIndex.entityPrecise.mask, QueryTriggerInteraction.UseGlobal))
+                    {
+                        slamDistance = hitInfo.distance;
+                    }
+
+                }
+                else
+                {
+                    outer.SetStateToMain();
+                    return;
+                }
+                characterBody.AddBuffAuthotiry(JunkContent.Buffs.IgnoreFallDamage);
+                removeBuff = true;
+            }
+                
+        }
+        private void CharacterMotor_onHitGroundAuthority(ref CharacterMotor.HitGroundInfo hitGroundInfo)
+        {
+            Collider[] colliders = Physics.OverlapSphere(characterBody.footPosition, slamRadius, LayerIndex.CommonMasks.characterBodies + LayerIndex.CommonMasks.fakeActorLayers, QueryTriggerInteraction.UseGlobal);
+            List<CharacterBody> list = new List<CharacterBody>();
+            foreach (Collider collider in colliders)
+            {
+                CharacterBody characterBody = collider.GetComponent<CharacterBody>();
+                if (characterBody == null || list.Contains(characterBody)) continue;
+                if (characterBody.characterMotor)
+                {
+                    characterBody.characterMotor.Motor?.ForceUnground(0f);
+                    characterBody.characterMotor.velocity.y = Trajectory.CalculateInitialYSpeed(afterSlamTime, slamDistance);
+                    //characterBody.characterMotor.ApplyForce(Physics.gravity.normalized * -1f * slamForce, true, true);
+                }
+                list.Add(characterBody);
+            }
+            outer.SetNextStateToMain();
+        }
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            {
+                Vector3 vector3 = Physics.gravity * 3f;
+                slamTime += Time.fixedDeltaTime;
+                if (isAuthority)
+                {
+                    if (characterMotor)
+                    {
+                        characterMotor.SetVelocityOverride(vector3);
+                    }
+                    else if (rigidbody)
+                    {
+                        rigidbody.velocity = vector3;
+                    }
+                } 
+            }
+        }
+        public override void OnExit()
+        {
+            base.OnExit();
+            if (isAuthority)
+            {
+                if (characterMotor)
+                {
+                    characterMotor.SetVelocityOverride(Vector3.zero);
+                    characterMotor.disableAirControlUntilCollision = false;
+                    characterMotor.onHitGroundAuthority -= CharacterMotor_onHitGroundAuthority;
+                }
+                else if (rigidbody)
+                {
+                    rigidbody.velocity = Vector3.zero;
+                }
+                if(removeBuff)
+                characterBody.RemoveBuffAuthotiry(JunkContent.Buffs.IgnoreFallDamage);
+            }
+        }
+        public override InterruptPriority GetMinimumInterruptPriority()
+        {
+            return InterruptPriority.Any;
+        }
     }
     public class FireGluon : FreemanBulletAttack
     {
@@ -960,7 +1103,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => null;
         public override GameObject hitEffectPrefab => null;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => "";
+        public override string fireSoundString => "";
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -1016,14 +1159,15 @@ namespace GordonFreeman
             base.Update();
             RaycastHit raycastHit;
             Ray ray = GetAimRay();
-            if (Physics.Raycast(ray, out raycastHit, range, LayerIndex.world.mask + LayerIndex.entityPrecise.mask, QueryTriggerInteraction.UseGlobal))
-            {
-                endTransform.position = raycastHit.point;
-            }
-            else
-            {
-                endTransform.position = ray.origin + ray.direction * range;
-            }
+            endTransform.position = ray.origin + ray.direction * range;
+            //if (Physics.Raycast(ray, out raycastHit, range, LayerIndex.world.mask + LayerIndex.entityPrecise.mask, QueryTriggerInteraction.UseGlobal))
+            //{
+            //    endTransform.position = raycastHit.point;
+            //}
+            //else
+            //{
+            //    endTransform.position = ray.origin + ray.direction * range;
+            //}
         }
         public override void ModifyBulletAttack(ref BulletAttack bulletAttack)
         {
@@ -1090,7 +1234,6 @@ namespace GordonFreeman
             }
             return BulletAttack.DefaultHitCallbackImplementation(bulletAttack, ref hitInfo);
         }
-
         public override void FixedUpdate()
         {
             base.FixedUpdate();
@@ -1120,7 +1263,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => null;
         public override GameObject hitEffectPrefab => null;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => "";
+        public override string fireSoundString => "";
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -1138,8 +1281,8 @@ namespace GordonFreeman
         public override float maxSpread => 0f;
         public override bool crit => Util.CheckRoll(characterBody.crit, characterBody.master);
         public override float procCoefficient => 1f;
-        public override LayerMask hitMask => LayerIndex.debris.mask + LayerIndex.projectile.mask;
-        public override LayerMask stopperMask => LayerIndex.debris.mask + LayerIndex.projectile.mask;
+        public override LayerMask hitMask => LayerIndex.projectile.mask;
+        public override LayerMask stopperMask => LayerIndex.projectile.mask;
         public override float range => 6f;
         public static float baseDuration = 0.2f;
         public float duration;
@@ -1162,6 +1305,10 @@ namespace GordonFreeman
             ProjectileController projectileController = hitInfo.collider.GetComponent<ProjectileController>();
             if (projectileController != null)
             {
+                projectileController.IgnoreCollisionsWithOwner(false);
+                projectileController.owner = gameObject;
+                projectileController.IgnoreCollisionsWithOwner(true);
+                if (activatorSkillSlot) activatorSkillSlot.AddOneStock();
                 TeamFilter teamFilter = projectileController.teamFilter;
                 bool parry = true;
                 if (teamFilter != null && teamComponent && teamFilter.teamIndex == teamComponent.teamIndex) parry = false;
@@ -1171,7 +1318,9 @@ namespace GordonFreeman
                 Rigidbody rigidbody = projectileController.rigidbody;
                 if (rigidbody != null)
                 {
-                    rigidbody.velocity = Vector3.ClampMagnitude(rigidbody.velocity, MathF.Min(90f, rigidbody.velocity.magnitude * 2f));
+                    Ray ray = GetAimRay();
+                    rigidbody.position = ray.origin;
+                    rigidbody.velocity = Vector3.RotateTowards(rigidbody.velocity, ray.direction, 360f, 0f);
                     if (bulletAttack.isCrit)
                     {
                         ProjectileDamage projectileDamage = projectileController.gameObject.GetComponent<ProjectileDamage>();
@@ -1205,7 +1354,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => null;
         public override GameObject hitEffectPrefab => null;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => "";
+        public override string fireSoundString => "";
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -1276,7 +1425,7 @@ namespace GordonFreeman
         public override GameObject tracerEffectPrefab => null;
         public override GameObject hitEffectPrefab => null;
         public override GameObject weapon => weaponObject;
-        public override string firePistolSoundString => "";
+        public override string fireSoundString => "";
         public override float minVerticalRecoil => -0.4f;
         public override float maxVerticalRecoil => -0.8f;
         public override float minHorizontalRecoil => -0.3f;
@@ -1440,37 +1589,59 @@ namespace GordonFreeman
     public class FireHook : BaseFreemanState
     {
         public CharacterBody targetBody;
-        public static float speed = 24f;
+        public static float baseSpeed = 2f;
+        public float speed;
         public GameObject chainObject;
         public Transform startTransform;
         public Transform endTransform;
+        public LookAtTarget lookAtTarget;
         public override void OnEnter()
         {
             base.OnEnter();
+            characterBody.isSprinting = true;
+            speed = baseSpeed * characterBody.moveSpeed;
             HookTracker hookTracker = GetComponent<HookTracker>();
-            if (hookTracker != null && hookTracker.targetBody)
+            if (hookTracker != null && hookTracker.target)
             {
-                targetBody = hookTracker.targetBody;
+                targetBody = hookTracker.target.characterBody;
                 chainObject = GameObject.Instantiate(HookChainEffect);
                 ChildLocator childLocator = chainObject.GetComponent<ChildLocator>();
                 startTransform = childLocator.FindChild("Start");
                 endTransform = childLocator.FindChild("End");
-                startTransform.SetParent(weaponObject.transform, false);
+                startTransform.SetParent(muzzleTransform, false);
                 endTransform.SetParent(targetBody.transform, false);
-                characterBody.rootMotionInMainState = true;
+                //characterBody.rootMotionInMainState = true;
+                if (CameraRigController.readOnlyInstancesList != null)
+                {
+                    lookAtTarget = gameObject.AddComponent<LookAtTarget>();
+                    lookAtTarget.target = hookTracker.target.transform;
+                    lookAtTarget.inputBankTest = inputBank;
+                    foreach (CameraRigController cameraRigController in CameraRigController.readOnlyInstancesList)
+                    {
+                        cameraRigController.SetOverrideCam(lookAtTarget, 0.2f);
+                    }
+                }
             }
         }
         public override void OnExit()
         {
             base.OnExit();
-            if (chainObject)Destroy(chainObject);
+            if (chainObject) Destroy(chainObject);
             if (startTransform) Destroy(startTransform.gameObject);
-            if (endTransform)Destroy(endTransform.gameObject);
+            if (endTransform) Destroy(endTransform.gameObject);
             characterBody.rootMotionInMainState = false;
             if (characterMotor)
             {
                 characterMotor.disableAirControlUntilCollision = true;
                 characterMotor.SetVelocityOverride(Vector3.zero);
+            }
+            if (CameraRigController.readOnlyInstancesList != null && lookAtTarget)
+            {
+                foreach (CameraRigController cameraRigController in CameraRigController.readOnlyInstancesList)
+                {
+                    cameraRigController.SetOverrideCam(null, 0.2f);
+                }
+                Destroy(lookAtTarget);
             }
         }
         public override void FixedUpdate()
@@ -1486,7 +1657,7 @@ namespace GordonFreeman
             {
                 characterMotor.SetVelocityOverride(vector3 * speed);
             }
-            else if(rigidbody)
+            else if (rigidbody)
             {
                 rigidbody.velocity = vector3 * speed;
             }
@@ -1496,15 +1667,361 @@ namespace GordonFreeman
             }
             outer.SetNextStateToMain();
         }
+        public class LookAtTarget : MonoBehaviour, ICameraStateProvider
+        {
+            public Transform target;
+            public InputBankTest inputBankTest;
+            public void GetCameraState(CameraRigController cameraRigController, ref CameraState cameraState)
+            {
+                cameraState.rotation = Quaternion.LookRotation((target.position - (inputBankTest ? inputBankTest.aimOrigin : this.transform.position )).normalized);
+                //cameraState.position = this.transform.position;
+            }
+            public bool IsHudAllowed(CameraRigController cameraRigController)
+            {
+                return true;
+            }
+
+            public bool IsUserControlAllowed(CameraRigController cameraRigController)
+            {
+                return true;
+            }
+
+            public bool IsUserLookAllowed(CameraRigController cameraRigController)
+            {
+                return false;
+            }
+        }
     }
     public class ScopeSniper : FreemanScope
     {
         public override bool toExecute => inputBank && inputBank.skill1.justReleased;
-
-        public override SkillDef skillToUse => throw new NotImplementedException();
-
+        public override Type stateToEnter => typeof(FireSniper);
         public override GameObject crosshairOverrideObject => null;
-
         public override GameObject scopeOverlayObject => null;
+        public override GameObject sniperTargetObject => Assets.SniperTargetTest;
+    }
+    public class FireSniper : FreemanBulletAttack
+    {
+        public override GameObject muzzleEffectPrefab => FirePistol2.muzzleEffectPrefab;
+        public override GameObject tracerEffectPrefab => FirePistol2.tracerEffectPrefab;
+        public override GameObject hitEffectPrefab => FirePistol2.hitEffectPrefab;
+        public override GameObject weapon => weaponObject;
+        public override string fireSoundString => PistolFire.playSoundString;
+        public override float minVerticalRecoil => -0.4f;
+        public override float maxVerticalRecoil => -0.8f;
+        public override float minHorizontalRecoil => -0.3f;
+        public override float maxHorizontalRecoil => 0.3f;
+        public override float recoilAmplitude => FirePistol2.recoilAmplitude;
+        public override float trajectoryAimAssistMultiplier => FirePistol2.trajectoryAimAssistMultiplier;
+        public override float damageCoefficient => 4f;
+        public override DamageTypeCombo damageType => DamageTypeCombo.GenericSecondary;
+        public override BulletAttack.FalloffModel falloff => BulletAttack.FalloffModel.None;
+        public override float force => FirePistol2.force;
+        public override float spreadBloomValue => FirePistol2.spreadBloomValue;
+        public override float radius => 1f;
+        public override int bulletCount => 1;
+        public override float minSpread => 0f;
+        public override float maxSpread => 0f;
+        public override bool crit => Util.CheckRoll(characterBody.crit, characterBody.master);
+        public override float procCoefficient => 1f;
+        public override float range => 1024f;
+        public override LayerMask hitMask => LayerIndex.entityPrecise.mask;
+        public override LayerMask stopperMask => LayerIndex.entityPrecise.mask + LayerIndex.world.mask;
+        public static float baseDuration = 0.05f;
+        public float stopwatch = 0f;
+        public int step;
+        public float duration;
+        public override void OnEnter()
+        {
+            base.OnEnter();
+            this.duration = baseDuration;
+        }
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            stopwatch -= Time.fixedDeltaTime;
+            if (stopwatch <= 0f)
+            {
+                Ray ray = GetAimRay();
+                FireBullet(ray, "MuzzleRight");
+                if (isAuthority)
+                    activatorSkillSlot.stock--;
+                stopwatch = duration;
+            }
+            if (!base.isAuthority || IsKeyDownAuthority() && activatorSkillSlot.stock > 0)
+            {
+                return;
+            }
+            this.outer.SetNextStateToMain();
+        }
+        private bool Headshot(BulletAttack bulletAttack, ref BulletAttack.BulletHit hitInfo)
+        {
+            if(hitInfo.hitHurtBox && hitInfo.hitHurtBox.isSniperTarget)
+            {
+                CharacterBody characterBody = hitInfo.hitHurtBox.healthComponent && hitInfo.hitHurtBox.healthComponent .body ? hitInfo.hitHurtBox.healthComponent.body : null;
+                if (characterBody != null)
+                {
+                    characterBody.AddTimedBuffAuthority(DLC2Content.Buffs.DisableAllSkills.buffIndex, 4f);
+                }
+            }
+            return BulletAttack.DefaultHitCallbackImplementation(bulletAttack, ref hitInfo);
+        }
+    }
+    public class FireJackhammer : FreemanBulletAttack
+    {
+        public override GameObject muzzleEffectPrefab => null;
+        public override GameObject tracerEffectPrefab => null;
+        public override GameObject hitEffectPrefab => null;
+        public override GameObject weapon => weaponObject;
+        public override string fireSoundString => "";
+        public override float minVerticalRecoil => -0.4f;
+        public override float maxVerticalRecoil => -0.8f;
+        public override float minHorizontalRecoil => -0.3f;
+        public override float maxHorizontalRecoil => 0.3f;
+        public override float recoilAmplitude => 0f;
+        public override float trajectoryAimAssistMultiplier => FirePistol2.trajectoryAimAssistMultiplier;
+        public override float damageCoefficient => 0.5f * characterBody.attackSpeed;
+        public override DamageTypeCombo damageType => DamageTypeCombo.GenericPrimary;
+        public override BulletAttack.FalloffModel falloff => BulletAttack.FalloffModel.None;
+        public override float force => FirePistol2.force;
+        public override float spreadBloomValue => 0f;
+        public override float radius => 1f;
+        public override int bulletCount => 1;
+        public override float minSpread => 0f;
+        public override float maxSpread => 0f;
+        public override bool crit => Util.CheckRoll(characterBody.crit, characterBody.master);
+        public override float procCoefficient => 1f;
+        public override LayerMask hitMask => LayerIndex.entityPrecise.mask + LayerIndex.projectile.mask;
+        public override LayerMask stopperMask => LayerIndex.entityPrecise.mask + LayerIndex.world.mask;
+        public override float range => 6f;
+        public static float baseDuration = 1f / 30f;
+        public static float exitTime = 0.5f;
+        public float duration;
+        public float stopwatch;
+        public bool end = false;
+        public override void OnEnter()
+        {
+            base.OnEnter();
+            duration = baseDuration;
+            stopwatch = duration;
+        }
+        public override void OnExit()
+        {
+            base.OnExit();
+        }
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            Ray ray = GetAimRay();
+            base.StartAimMode(ray, 3f, false);
+            stopwatch -= Time.fixedDeltaTime;
+            if (stopwatch <= 0f)
+            {
+                if (end)
+                {
+                    this.outer.SetNextStateToMain();
+                }
+                else
+                {
+                    this.FireBullet(ray, "");
+                    stopwatch = duration;
+                }
+            }
+            if (!base.isAuthority || (IsKeyDownAuthority() && activatorSkillSlot.stock > 0) || end)
+            {
+                return;
+            }
+            end = true;
+            stopwatch = exitTime;
+        }
+    }
+    public class JackhammerSlingshot : BaseFreemanState
+    {
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            if (!base.isAuthority || IsKeyDownAuthority())
+            {
+                return;
+            }
+            Ray ray = GetAimRay();
+            if (characterMotor)
+            {
+                characterMotor.velocity += ray.direction * MathF.Min(age, 5f);
+            }
+            else if (rigidbody)
+            {
+                rigidbody.velocity += ray.direction * MathF.Min(age, 5f);
+            }
+            this.outer.SetNextStateToMain();
+        }
+    }
+    public class FireCrucible : FreemanBulletAttack
+    {
+        public override GameObject muzzleEffectPrefab => null;
+        public override GameObject tracerEffectPrefab => null;
+        public override GameObject hitEffectPrefab => null;
+        public override GameObject weapon => weaponObject;
+        public override string fireSoundString => "";
+        public override float minVerticalRecoil => -0.4f;
+        public override float maxVerticalRecoil => -0.8f;
+        public override float minHorizontalRecoil => -0.3f;
+        public override float maxHorizontalRecoil => 0.3f;
+        public override float recoilAmplitude => 0f;
+        public override float trajectoryAimAssistMultiplier => FirePistol2.trajectoryAimAssistMultiplier;
+        public override float damageCoefficient => 0.5f * characterBody.attackSpeed;
+        public override DamageTypeCombo damageType => DamageTypeCombo.GenericPrimary;
+        public override BulletAttack.FalloffModel falloff => BulletAttack.FalloffModel.None;
+        public override float force => FirePistol2.force;
+        public override float spreadBloomValue => 0f;
+        public override float radius => 1f;
+        public override int bulletCount => 1;
+        public override float minSpread => 0f;
+        public override float maxSpread => 0f;
+        public override bool crit => Util.CheckRoll(characterBody.crit, characterBody.master);
+        public override float procCoefficient => 1f;
+        public override LayerMask hitMask => LayerIndex.entityPrecise.mask + LayerIndex.projectile.mask;
+        public override LayerMask stopperMask => LayerIndex.entityPrecise.mask + LayerIndex.world.mask;
+        public override float range => 6f;
+        public static float fireTime = 0.4f;
+        public static float exitTime = 0.8f;
+        public float duration;
+        public float stopwatch;
+        public bool fire = true;
+        public override void OnEnter()
+        {
+            base.OnEnter();
+            duration = fireTime;
+        }
+        public override void OnExit()
+        {
+            base.OnExit();
+        }
+        public override void ModifyBulletAttack(ref BulletAttack bulletAttack)
+        {
+            base.ModifyBulletAttack(ref bulletAttack);
+            bulletAttack.AddModdedDamageType(BrynzaAPI.Assets.BruiseChampion);
+            bulletAttack.AddModdedDamageType(BrynzaAPI.Assets.InstakillNoChampion);
+        }
+
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            Ray ray = GetAimRay();
+            base.StartAimMode(ray, 3f, false);
+            stopwatch += Time.fixedDeltaTime;
+            if (stopwatch >= duration)
+            {
+                if (fire)
+                {
+                    this.FireBullet(ray, "");
+                    fire = false;
+                }
+            }
+            if (!base.isAuthority || stopwatch < exitTime)
+            {
+                return;
+            }
+            outer.SetNextStateToMain();
+        }
+    }
+    public class CrucibleSlam : BaseFreemanState
+    {
+        public static float slamRadius = 24f;
+        public static float slamSpeed = 3f;
+        public static float afterSlamTime = 2f;
+        public float slamTime;
+        public float slamDistance = 10f;
+        public float slamForce => (slamDistance / afterSlamTime) - (Physics.gravity.y * afterSlamTime / 2f);
+        public bool removeBuff = false;
+        public override void OnEnter()
+        {
+            base.OnEnter();
+            if (isAuthority)
+            {
+                if (characterMotor)
+                {
+                    if (characterMotor.isGrounded)
+                    {
+                        outer.SetStateToMain();
+                        return;
+                    }
+                    characterMotor.onHitGroundAuthority += CharacterMotor_onHitGroundAuthority;
+                    if (Physics.Raycast(characterBody.footPosition, new Vector3(0f, Physics.gravity.y, 0f), out var hitInfo, 99999f, LayerIndex.world.mask + LayerIndex.defaultLayer.mask + LayerIndex.entityPrecise.mask, QueryTriggerInteraction.UseGlobal))
+                    {
+                        slamDistance = hitInfo.distance;
+                    }
+
+                }
+                else
+                {
+                    outer.SetStateToMain();
+                    return;
+                }
+                characterBody.AddBuffAuthotiry(JunkContent.Buffs.IgnoreFallDamage);
+                removeBuff = true;
+            }
+
+        }
+        private void CharacterMotor_onHitGroundAuthority(ref CharacterMotor.HitGroundInfo hitGroundInfo)
+        {
+            Collider[] colliders = Physics.OverlapSphere(characterBody.footPosition, slamRadius, LayerIndex.CommonMasks.characterBodies + LayerIndex.CommonMasks.fakeActorLayers, QueryTriggerInteraction.UseGlobal);
+            List<CharacterBody> list = new List<CharacterBody>();
+            foreach (Collider collider in colliders)
+            {
+                CharacterBody characterBody = collider.GetComponent<CharacterBody>();
+                if (characterBody == null || list.Contains(characterBody)) continue;
+                if (characterBody.characterMotor)
+                {
+                    characterBody.characterMotor.Motor?.ForceUnground(0f);
+                    characterBody.characterMotor.velocity.y = Trajectory.CalculateInitialYSpeed(afterSlamTime, slamDistance);
+                    //characterBody.characterMotor.ApplyForce(Physics.gravity.normalized * -1f * slamForce, true, true);
+                }
+                list.Add(characterBody);
+            }
+            outer.SetNextStateToMain();
+        }
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            {
+                Vector3 vector3 = Physics.gravity * 3f;
+                slamTime += Time.fixedDeltaTime;
+                if (isAuthority)
+                {
+                    if (characterMotor)
+                    {
+                        characterMotor.SetVelocityOverride(vector3);
+                    }
+                    else if (rigidbody)
+                    {
+                        rigidbody.velocity = vector3;
+                    }
+                }
+            }
+        }
+        public override void OnExit()
+        {
+            base.OnExit();
+            if (isAuthority)
+            {
+                if (characterMotor)
+                {
+                    characterMotor.SetVelocityOverride(Vector3.zero);
+                    characterMotor.disableAirControlUntilCollision = false;
+                    characterMotor.onHitGroundAuthority -= CharacterMotor_onHitGroundAuthority;
+                }
+                else if (rigidbody)
+                {
+                    rigidbody.velocity = Vector3.zero;
+                }
+                if (removeBuff)
+                    characterBody.RemoveBuffAuthotiry(JunkContent.Buffs.IgnoreFallDamage);
+            }
+        }
+        public override InterruptPriority GetMinimumInterruptPriority()
+        {
+            return InterruptPriority.Any;
+        }
     }
 }

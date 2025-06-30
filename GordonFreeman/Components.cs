@@ -27,6 +27,7 @@ using System.Collections;
 using UnityEngine.Bindings;
 using RoR2.PostProcessing;
 using RoR2BepInExPack.Utilities;
+using TMPro;
 
 namespace GordonFreeman
 {
@@ -210,6 +211,7 @@ namespace GordonFreeman
                     if (primarySkillDef && primarySkillDef.weaponModel)
                     {
                         modelComponent.AddWeaponModel(primarySkillDef, primarySkillDef.weaponModel);
+                        modelComponent.AddWeaponCrosshair(skill, primarySkillDef.weaponModel, @object.transform.parent);
                     }
                     weaponWheelSelectorComponent.weaponButtons.Add(hGButton);
                 }
@@ -304,6 +306,10 @@ namespace GordonFreeman
             {
                 rampageCount = 0;
             }
+            if (Input.GetKeyDown(KeyCode.Q))
+            {
+                ApplyWeapon(previousWeapon);
+            }
         }
         public void SwapUp()
         {
@@ -370,29 +376,44 @@ namespace GordonFreeman
     }
     public class ProfessionalModelComponent : MonoBehaviour
     {
-        [HideInInspector] public Dictionary<SkillDef, WeaponModel> keyValuePairs = new Dictionary<SkillDef, WeaponModel>();
+        [HideInInspector] public Dictionary<SkillDef, WeaponModel> skillsToWeaponModels = new Dictionary<SkillDef, WeaponModel>();
+        [HideInInspector] public Dictionary<ProfessionalSkillLocator, WeaponCrosshairBaseAddition> skillsToWeaponCrosshairs = new Dictionary<ProfessionalSkillLocator, WeaponCrosshairBaseAddition>();
         public Transform weaponsTransform;
         public Transform weaponTransform;
         [HideInInspector] public WeaponModel currentWeaponModel;
+        [HideInInspector] public WeaponCrosshairBaseAddition currentWeaponCrosshair;
         public FirstPersonCamera firstPersonCamera;
         public CameraTargetParams cameraTargetParams;
         public ChildLocator childLocator;
-        [HideInInspector] public Vector3 previousVector;
-        public void AddWeaponModel(SkillDef skillDef, WeaponModelDef weaponModelDef)
+        [HideInInspector] public Vector3 weaponVector;
+        [HideInInspector] public Vector3 weaponVectorVelocity;
+        public static float weaponVectorSmoothTime = 0.2f;
+        public WeaponModel AddWeaponModel(SkillDef skillDef, WeaponModelDef weaponModelDef)
         {
-            if (skillDef == null || weaponModelDef == null || keyValuePairs.ContainsKey(skillDef)) return;
+            if (skillDef == null || weaponModelDef == null || skillsToWeaponModels.ContainsKey(skillDef)) return null;
             WeaponModel weaponModel = weaponModelDef.ApplyWeaponModel(this);
-            keyValuePairs.Add(skillDef, weaponModel);
+            skillsToWeaponModels.Add(skillDef, weaponModel);
+            return weaponModel;
+        }
+        public WeaponCrosshairBaseAddition AddWeaponCrosshair(ProfessionalSkillLocator professionalSkillLocator, WeaponModelDef weaponModelDef, Transform transform)
+        {
+            if (weaponModelDef == null || weaponModelDef.crosshairAddition == null) return null;
+            WeaponCrosshairBaseAddition weaponCrosshair = Instantiate(weaponModelDef.crosshairAddition, transform);
+            weaponCrosshair.gameObject.SetActive(false);
+            weaponCrosshair.primarySkill = professionalSkillLocator.primarySkill;
+            weaponCrosshair.secondarySkill = professionalSkillLocator.secondarySkill;
+            skillsToWeaponCrosshairs.Add(professionalSkillLocator, weaponCrosshair);
+            return weaponCrosshair;
         }
         public WeaponModel PullOnWeaponModel(SkillDef skillDef)
         {
             if (skillDef == null) return null;
-            if (!keyValuePairs.ContainsKey(skillDef))
+            if (!skillsToWeaponModels.ContainsKey(skillDef))
             {
                 PullOffCurrentWeaponModel();
                 return null;
             }
-            WeaponModel weaponModel = keyValuePairs[skillDef];
+            WeaponModel weaponModel = skillsToWeaponModels[skillDef];
             if(currentWeaponModel)
             {
                 if (currentWeaponModel == weaponModel) return weaponModel;
@@ -402,29 +423,49 @@ namespace GordonFreeman
             currentWeaponModel = weaponModel;
             weaponModel.transform.rotation = Quaternion.identity;
             weaponModel.transform.SetParent(weaponTransform, false);
+            if (cameraTargetParams) { cameraTargetParams.recoil = Vector2.zero; cameraTargetParams.recoilVelocity = Vector2.zero; }
+            weaponVector = new Vector3(45f, 0f, 0f);
             int i = childLocator.FindChildIndex("Muzzle");
             if(i != -1)
             childLocator.transformPairs[i].transform = weaponModel.muzzleTransform ? weaponModel.muzzleTransform : weaponTransform;
             return weaponModel;
         }
+        public WeaponCrosshairBaseAddition TurnOnWeaponCrosshair(ProfessionalSkillLocator professionalSkillLocator)
+        {
+            if(professionalSkillLocator == null) return null;
+            if (!skillsToWeaponCrosshairs.ContainsKey(professionalSkillLocator)) return null;
+            WeaponCrosshairBaseAddition weaponCrosshairBaseAddition = skillsToWeaponCrosshairs[professionalSkillLocator];
+            currentWeaponCrosshair = weaponCrosshairBaseAddition;
+            weaponCrosshairBaseAddition.gameObject.SetActive(true);
+            return weaponCrosshairBaseAddition;
+        }
+        public void TurnOffCurrentWeaponCrosshair()
+        {
+            WeaponCrosshairBaseAddition weaponCrosshairBaseAddition = currentWeaponCrosshair;
+            if (weaponCrosshairBaseAddition == null) return;
+            weaponCrosshairBaseAddition.gameObject.SetActive(false);
+            currentWeaponCrosshair = null;
+        }
         public void PullOffCurrentWeaponModel()
         {
-            if(currentWeaponModel == null) return;
-            if (currentWeaponModel)
-            {
-                currentWeaponModel.transform.SetParent(weaponsTransform, false);
-                currentWeaponModel.gameObject.SetActive(false);
-                currentWeaponModel.transform.rotation = Quaternion.identity;
-                currentWeaponModel = null;
-                int i = childLocator.FindChildIndex("Muzzle");
-                if (i != -1)
-                    childLocator.transformPairs[i].transform = weaponTransform;
-            }
+            if (currentWeaponModel == null) return;
+            currentWeaponModel.transform.SetParent(weaponsTransform, false);
+            currentWeaponModel.gameObject.SetActive(false);
+            currentWeaponModel.transform.rotation = Quaternion.identity;
+            currentWeaponModel = null;
+            int i = childLocator.FindChildIndex("Muzzle");
+            if (i != -1)
+                childLocator.transformPairs[i].transform = weaponTransform;
         }
         public void Update()
         {
-            if (!currentWeaponModel) return;
-            currentWeaponModel.transform.localEulerAngles = new Vector3 (cameraTargetParams.recoil.y, cameraTargetParams.recoil.x, 0f);
+            if(weaponVector != Vector3.zero)
+            weaponVector = Vector3.SmoothDamp(weaponVector, Vector3.zero, ref weaponVectorVelocity, weaponVectorSmoothTime);
+            if (!currentWeaponModel || !cameraTargetParams) return;
+            bool flag = cameraTargetParams.recoil == Vector2.zero;
+            if (!flag) weaponVector = Vector3.zero;
+            currentWeaponModel.transform.localEulerAngles = new Vector3 ((flag ? 0f : cameraTargetParams.recoil.y * 2f) + weaponVector.x, (flag ? 0f : cameraTargetParams.recoil.x * 2f) + weaponVector.y, 0f + weaponVector.z);
+            currentWeaponModel.transform.localPosition = new Vector3(0f, 0f, flag ? 0f : -cameraTargetParams.recoil.magnitude / 2f);
         }
     }
     public class ProfessionalSkillLocator : MonoBehaviour
@@ -846,8 +887,8 @@ namespace GordonFreeman
         }
         public void OnEnable()
         {
-            if (!enabled && Hooks.receivedMaterials)
-            IncreaseDetails();
+            //if (!enabled && Hooks.receivedMaterials)
+            //IncreaseDetails();
         }
         private void IncreaseDetails()
         {
@@ -911,6 +952,7 @@ namespace GordonFreeman
                 previousCameraObject.gameObject.SetActive(true);
                 if (cameraRigController) cameraRigController.sceneCam = previousCameraObject;
             }
+            waitToIncreaseDetails = true;
             weaponCamera.enabled = false;
             enabled = false;
             DecreaseDetails();
@@ -1050,8 +1092,8 @@ namespace GordonFreeman
     
     public class HookTracker : MonoBehaviour
     {
-        public FixedConditionalWeakTable<Collider, CharacterBody> keyValuePairs = new FixedConditionalWeakTable<Collider, CharacterBody>();
-        public CharacterBody targetBody;
+        public Dictionary<Collider, HookTarget> keyValuePairs = new Dictionary<Collider, HookTarget>();
+        public HookTarget target;
         public CharacterBody ownerBody;
         public InputBankTest inputBankTest;
         public static float radius = 5f;
@@ -1065,34 +1107,38 @@ namespace GordonFreeman
         }
         public void FixedUpdate()
         {
-            if (!active) { targetBody = null; return; };
+            if (!active) { target = null; return; };
             Ray ray = GetAimRay();
-            Collider[] colliders = Physics.OverlapCapsule(ray.origin + ray.direction * radius, ray.origin + ray.direction * range, radius, LayerIndex.entityPrecise.mask, QueryTriggerInteraction.UseGlobal);
-            float newRange = range * range;
-            CharacterBody characterBody1 = null;
+            Collider[] colliders = Physics.OverlapCapsule(ray.origin + ray.direction * radius, ray.origin + ray.direction * range, radius, LayerIndex.CommonMasks.characterBodies + LayerIndex.CommonMasks.fakeActorLayers, QueryTriggerInteraction.UseGlobal);
+            //float newRange = range * range;
+            float angle = 360f;
+            HookTarget hookTarget1 = null;
             foreach (Collider collider in colliders)
             {
-                CharacterBody characterBody = null;
-                if (keyValuePairs.TryGetValue(collider, out characterBody))
+                HookTarget hookTarget = null;
+                if (keyValuePairs.TryGetValue(collider, out hookTarget))
                 {
                 }
                 else
                 {
-                    HurtBox hurtBox = collider.GetComponent<HurtBox>();
-                    characterBody = hurtBox && hurtBox.healthComponent ? hurtBox.healthComponent.body : null;
-                    keyValuePairs.Add(collider, characterBody);
+                    hookTarget = collider.gameObject.AddComponent<HookTarget>();
+                    hookTarget.collider = collider;
+                    hookTarget.keyValuePairs = keyValuePairs;
+                    keyValuePairs.Add(collider, hookTarget);
                 }
-                if (characterBody != null && ownerBody != characterBody)
+                if (hookTarget && hookTarget.characterBody && ownerBody != hookTarget.characterBody)
                 {
-                    float newRange2 = (characterBody.corePosition - ray.origin).sqrMagnitude;
-                    if (newRange2 < newRange)
+                    float newAngle = Vector3.Angle(hookTarget.position, ray.origin);
+                    //float newRange2 = (characterBody.corePosition - ray.origin).sqrMagnitude;
+                    if (newAngle < angle)
                     {
-                        newRange = newRange2;
-                        characterBody1 = characterBody;
+                        angle = newAngle;
+                        //newRange = newRange2;
+                        hookTarget1 = hookTarget;
                     }
                 }
             }
-            targetBody = characterBody1;
+            target = hookTarget1;
         }
         public void Update()
         {
@@ -1104,7 +1150,7 @@ namespace GordonFreeman
             {
                 indicator.active = false;
             }
-            indicator.targetTransform = targetBody ? targetBody.transform : null;
+            indicator.targetTransform = target ? target.transform : null;
         }
         public Ray GetAimRay()
         {
@@ -1113,6 +1159,104 @@ namespace GordonFreeman
                 origin = inputBankTest ? inputBankTest.aimOrigin : transform.position,
                 direction = inputBankTest ? inputBankTest.aimDirection : transform.forward,
             };
+        }
+    }
+    public class HookTarget : MonoBehaviour
+    {
+        public CharacterBody characterBody;
+        public Collider collider;
+        public Dictionary<Collider, HookTarget> keyValuePairs;
+        public Vector3 position
+        {
+            get
+            {
+                if(characterBody == null) return transform.position;
+                return characterBody.corePosition;
+            }
+        }
+        public void Awake()
+        {
+            if (!characterBody)
+            characterBody = GetComponent<CharacterBody>();
+        }
+        public void OnEnable()
+        {
+            if (keyValuePairs != null && collider && !keyValuePairs.ContainsKey(collider)) keyValuePairs.Add(collider, this);
+        }
+        public void OnDisable()
+        {
+            if (keyValuePairs != null && collider && keyValuePairs.ContainsKey(collider)) keyValuePairs.Remove(collider);
+        }
+    }
+    public abstract class WeaponCrosshairBaseAddition : MonoBehaviour
+    {
+        public GenericSkill primarySkill;
+        public GenericSkill secondarySkill;
+        public virtual void Awake()
+        {
+
+        }
+        public virtual void OnEnable()
+        {
+
+        }
+        public virtual void Start()
+        {
+
+        }
+        public virtual void FixedUpdate()
+        {
+
+        }
+        public virtual void Update()
+        {
+
+        }
+        public virtual void OnDisable()
+        {
+
+        }
+        public virtual void OnDestroy()
+        {
+
+        }
+    }
+    public class WeaponCrosshairBasicAddition : WeaponCrosshairBaseAddition
+    {
+        public TextMeshProUGUI primaryStocksText;
+        public Image primaryStocksImage;
+        public TextMeshProUGUI primaryCooldownText;
+        public Image primaryCooldownImage;
+        public TextMeshProUGUI secondaryStocksText;
+        public Image secondaryStocksImage;
+        public TextMeshProUGUI secondaryCooldownText;
+        public Image secondaryCooldownImage;
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            if(primarySkill)
+            {
+                if (primaryStocksText) primaryStocksText.text = primarySkill.stock.ToString();
+                if (primaryStocksImage) primaryStocksImage.fillAmount = (float)primarySkill.stock / (float)primarySkill.maxStock;
+                if (primaryCooldownText) primaryCooldownText.text = (primarySkill.rechargeStopwatch / primarySkill.finalRechargeInterval).ToString();
+                if (primaryCooldownImage) primaryStocksImage.fillAmount = primarySkill.rechargeStopwatch / primarySkill.finalRechargeInterval;
+            }
+            if (secondarySkill)
+            {
+                if (secondaryStocksText) secondaryStocksText.text = secondarySkill.stock.ToString();
+                if (secondaryStocksImage) secondaryStocksImage.fillAmount = (float)secondarySkill.stock / (float)secondarySkill.maxStock;
+                if (secondaryCooldownText) secondaryCooldownText.text = (secondarySkill.rechargeStopwatch / secondarySkill.finalRechargeInterval).ToString();
+                if (secondaryCooldownImage) secondaryStocksImage.fillAmount = secondarySkill.rechargeStopwatch / secondarySkill.finalRechargeInterval;
+            }
+        }
+    }
+    public class ProjectileTracker : MonoBehaviour
+    {
+        public ProjectileController projectileController;
+        public void Update()
+        {
+            if (projectileController == null) { Destroy(gameObject); return; }
+            transform.position = projectileController.transform.position;
         }
     }
     [CreateAssetMenu(menuName = "RoR2/SkillDef/Professional")]
@@ -1151,7 +1295,7 @@ namespace GordonFreeman
             {
                 hookTracker.active = false;
             }
-            return hookTracker.targetBody;
+            return hookTracker.target;
         }
         public override bool CanExecute([NotNull] GenericSkill skillSlot)
         {
@@ -1181,6 +1325,7 @@ namespace GordonFreeman
             newWeaponModel.gameObject.SetActive(false);
             return newWeaponModel;
         }
+        public WeaponCrosshairBaseAddition crosshairAddition;
     }
 }
 

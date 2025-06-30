@@ -19,6 +19,8 @@ using static UnityEngine.ResourceManagement.ResourceProviders.AssetBundleResourc
 using System.Collections;
 using RoR2.ContentManagement;
 using Rewired;
+using BepInEx.Configuration;
+using UnityEngine.UI;
 
 namespace GordonFreeman
 {
@@ -43,8 +45,49 @@ namespace GordonFreeman
             SceneManager.activeSceneChanged += SceneManager_activeSceneChanged;
             On.RoR2.BulletAttack.ProcessHit += BulletAttack_ProcessHit;
             GlobalEventManager.onCharacterDeathGlobal += GlobalEventManager_onCharacterDeathGlobal;
+            On.RoR2.Projectile.ProjectileController.OnEnable += ProjectileController_OnEnable;
+            //On.RoR2.Projectile.ProjectileController.OnDisable += ProjectileController_OnDisable;
+            RoR2Application.onLoadFinished += AddMusic;
             //IL.RoR2.PlayerCharacterMasterController.PollButtonInput += PlayerCharacterMasterController_PollButtonInput;
         }
+
+        private static void AddMusic()
+        {
+            string musicTracks = "";
+            foreach (var music in Assets.customMusicTracks)
+            {
+                musicTracks += "\n" + music.cachedName;
+            }
+            Configs.MusicPicker = Main.configFile.Bind<string>("Music", "Music track", "HalfLife", "Select music tracks:" + musicTracks);
+            Configs.MusicPicker.AddConfigToRiskOfOptions();
+        }
+
+        private static void ProjectileController_OnDisable(On.RoR2.Projectile.ProjectileController.orig_OnDisable orig, RoR2.Projectile.ProjectileController self)
+        {
+            orig(self);
+            Transform transform = self.transform.Find("FreemanProjectileTracker");
+            if (transform)
+            {
+                GameObject.Destroy(transform.gameObject);
+            }
+        }
+
+        private static void ProjectileController_OnEnable(On.RoR2.Projectile.ProjectileController.orig_OnEnable orig, RoR2.Projectile.ProjectileController self)
+        {
+            orig(self);
+            GameObject gameObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            ProjectileTracker projectileTracker = gameObject.AddComponent<ProjectileTracker>();
+            projectileTracker.projectileController = self;
+            gameObject.name = "FreemanProjectileTracker";
+            gameObject.GetComponent<Renderer>().material = Assets.IndicatorMaterial;
+            Collider collider = gameObject.GetComponent<Collider>();
+            if(collider != null) GameObject.Destroy(collider);
+            gameObject.layer = LayerIndex.noCollision.intVal;
+            Outline outline = gameObject.GetOrAddComponent<Outline>();
+            outline.effectColor = Color.white;
+            //gameObject.transform.SetParent(self.transform, false);
+        }
+
         private static void PlayerCharacterMasterController_PollButtonInput(ILContext il)
         {
             ILCursor c = new ILCursor(il);
